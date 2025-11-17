@@ -1,31 +1,74 @@
 {
-  "staff_role_id": 1381342392161931444,
-  "panel_message_id": 1438646872171483267,
-  "panel_channel_id": 1381637021440938185,
-  "categories": [
+  "staff_role_id": "1381342392161931444",
+  "panels": [
     {
-      "name": "Support",
+      "name": "Supporto Discord",
       "emoji": "🆘",
       "color": 3447003,
-      "description": "Richiesta di supporto tecnico"
+      "description": "Ricevi supporto per problemi su Discord",
+      "image": "https://discord.com/assets/f8389ca1a741a115313bda9a82daf1dd.png",
+      "fields": [
+        {
+          "name": "Descrizione Problema",
+          "placeholder": "Descrivi il tuo problema..."
+        },
+        {
+          "name": "Screenshot/Video",
+          "placeholder": "Condividi screenshot o link video..."
+        }
+      ]
     },
     {
-      "name": "Reported User",
-      "emoji": "⚠️",
+      "name": "Richiesta CW",
+      "emoji": "🎖️",
+      "color": 16776960,
+      "description": "Richiedi una ClanWar",
+      "image": "https://cdn-icons-png.flaticon.com/512/827/827545.png",
+      "fields": [
+        {
+          "name": "Nome Clan",
+          "placeholder": "Nome del tuo clan..."
+        },
+        {
+          "name": "Tag Clan",
+          "placeholder": "Tag del clan (es: #ABC123)..."
+        },
+        {
+          "name": "Dimensione Squadra",
+          "placeholder": "Numero di giocatori..."
+        },
+        {
+          "name": "Avversari",
+          "placeholder": "Che tipo di avversari cerchi?..."
+        }
+      ]
+    },
+    {
+      "name": "Join Clan",
+      "emoji": "⚔️",
       "color": 16711680,
-      "description": "Segnalazione di un utente"
-    },
-    {
-      "name": "Suggestion",
-      "emoji": "💡",
-      "color": 65280,
-      "description": "Suggerimenti e feedback"
-    },
-    {
-      "name": "Bug Report",
-      "emoji": "🐛",
-      "color": 16711680,
-      "description": "Segnalazione di bug"
+      "description": "Richiedi di entrare in un clan",
+      "image": "https://cdn-icons-png.flaticon.com/512/3556/3556098.png",
+      "fields": [
+        {
+          "name": "Nome Giocatore",
+          "placeholder": "Il tuo nome di gioco..."
+        },
+        {
+          "name": "Tag",
+          "placeholder": "Il tuo tag personale..."
+        },
+        {
+          "name": "Clan di Interesse",
+          "placeholder": "A quale clan vuoi unirti?..."
+        },
+        {
+          "name": "Esperienza",
+          "placeholder": "Descrivi la tua esperienza..."
+        }
+      ]
     }
-  ]
+  ],
+  "panel_message_id": "1439020998656655472",
+  "panel_channel_id": "1381637021440938185"
 }

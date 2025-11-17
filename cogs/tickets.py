@@ -1,31 +1,66 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, ui
 from datetime import datetime
 import json
 import os
 import asyncio
+import glob
 
 from bot_utils import owner_or_has_permissions, is_owner
 
-class TicketCategoryView(discord.ui.View):
-    def __init__(self, categories, cog):
-        super().__init__(timeout=None)
-        self.categories = categories
+# Stampa tutti i file .json ricorsivamente
+json_files = glob.glob("**/*.json", recursive=True)
+print(json_files)
+
+class TicketFormModal(ui.Modal):
+    def __init__(self, panel_data, cog):
+        super().__init__(title=f"Informazioni - {panel_data['name']}")
+        self.panel_data = panel_data
         self.cog = cog
         
-        for category in categories:
-            self.add_item(TicketCategoryButton(category, cog))
-
-class TicketCategoryButton(discord.ui.Button):
-    def __init__(self, category, cog):
-        super().__init__(
-            label=category["name"],
-            emoji=category["emoji"],
-            style=discord.ButtonStyle.primary,
-            custom_id=f"ticket_create_{category['name'].lower().replace(' ', '_')}"
+        # Aggiungi campi dinamicamente
+        for field in panel_data.get('fields', [])[:5]:  # Max 5 campi per modal
+            self.add_item(ui.TextInput(
+                label=field['name'],
+                placeholder=field.get('placeholder', ''),
+                required=True,
+                style=discord.TextStyle.paragraph if len(field['name']) > 20 else discord.TextStyle.short
+            ))
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        # Crea l'embed con le informazioni inserite
+        embed = discord.Embed(
+            title=f"📋 Informazioni Ticket - {self.panel_data['name']}",
+            color=self.panel_data['color'],
+            timestamp=datetime.now()
         )
-        self.category = category
+        
+        # Aggiungi l'immagine
+        if self.panel_data.get('image'):
+            embed.set_image(url=self.panel_data['image'])
+        
+        # Aggiungi i campi compilati
+        for i, text_input in enumerate(self.children):
+            field_name = self.panel_data['fields'][i]['name'] if i < len(self.panel_data['fields']) else f"Campo {i+1}"
+            embed.add_field(name=field_name, value=text_input.value, inline=False)
+        
+        embed.set_footer(text=f"Ticket di {interaction.user}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
+        
+        await interaction.channel.send(embed=embed)
+        await interaction.followup.send("✅ Informazioni registrate!", ephemeral=True)
+
+class TicketPanelButton(discord.ui.Button):
+    def __init__(self, panel_data, cog):
+        super().__init__(
+            label=panel_data['name'],
+            emoji=panel_data['emoji'],
+            style=discord.ButtonStyle.primary,
+            custom_id=f"ticket_panel_{panel_data['name'].lower().replace(' ', '_')}"
+        )
+        self.panel_data = panel_data
         self.cog = cog
     
     async def callback(self, interaction: discord.Interaction):
@@ -65,29 +100,96 @@ class TicketCategoryButton(discord.ui.Button):
             ticket_id = str(ticket_channel.id)
             self.cog.tickets[ticket_id] = {
                 'author': interaction.user.id,
-                'topic': self.category['name'],
-                'category': self.category['name'],
+                'panel': self.panel_data['name'],
                 'created_at': datetime.now().isoformat(),
-                'members': [interaction.user.id],
                 'status': 'open'
             }
             self.cog.save_tickets()
             
-            # Invia il messaggio di benvenuto nel ticket
+            # Invia il messaggio di benvenuto
             embed = discord.Embed(
-                title=f"Ticket: {self.category['name']}",
-                description=self.category['description'],
-                color=self.category['color']
+                title=f"🎟️ Ticket: {self.panel_data['name']}",
+                description=self.panel_data['description'],
+                color=self.panel_data['color']
             )
+            
+            if self.panel_data.get('image'):
+                embed.set_image(url=self.panel_data['image'])
+            
             embed.add_field(name="ID Ticket", value=ticket_id, inline=False)
-            embed.add_field(name="Data Creazione", value=datetime.now().strftime("%d/%m/%Y %H:%M:%S"), inline=False)
+            embed.add_field(name="Richiedente", value=interaction.user.mention, inline=False)
             embed.set_footer(text="Usa /ticket close per chiudere il ticket")
             
             await ticket_channel.send(embed=embed)
+            
+            # Taglia i ruoli in base al tipo di pannello
+            panel_name = self.panel_data['name']
+            mentions = [interaction.user.mention]
+            
+            if panel_name == "Supporto Discord":
+                role_id = self.cog.config.get("roles", {}).get("discord_mod")
+                if role_id:
+                    role = interaction.guild.get_role(role_id)
+                    if role:
+                        mentions.append(role.mention)
+            
+            elif panel_name == "Richiesta CW":
+                role_id = self.cog.config.get("roles", {}).get("cw_manager")
+                if role_id:
+                    role = interaction.guild.get_role(role_id)
+                    if role:
+                        mentions.append(role.mention)
+            
+            elif panel_name == "Join Clan":
+                for role_name in ["mod", "co_leader", "leader"]:
+                    role_id = self.cog.config.get("roles", {}).get(role_name)
+                    if role_id:
+                        role = interaction.guild.get_role(role_id)
+                        if role:
+                            mentions.append(role.mention)
+            
+            # Invia il messaggio con i tag
+            if len(mentions) > 1:
+                tag_message = " ".join(mentions)
+                await ticket_channel.send(f"📢 {tag_message}", allowed_mentions=discord.AllowedMentions(roles=True))
+            
+            # Mostra il form modale automaticamente
+            modal = TicketFormModal(self.panel_data, self.cog)
+            
+            # Attendi un po' per assicurarti che l'interazione sia completata
+            await asyncio.sleep(0.5)
+            
+            # Crea un embed di istruzioni
+            instr_embed = discord.Embed(
+                title="📝 Compila le Informazioni",
+                description="Clicca il bottone sottostante per aprire il modulo di compilazione",
+                color=0x3498DB
+            )
+            
+            # Crea il pulsante per compilare il form
+            button = discord.ui.Button(label="Compila Informazioni", style=discord.ButtonStyle.success)
+            
+            async def modal_callback(button_interaction: discord.Interaction):
+                await button_interaction.response.send_modal(modal)
+            
+            button.callback = modal_callback
+            view = discord.ui.View(timeout=None)
+            view.add_item(button)
+            
+            await ticket_channel.send(embed=instr_embed, view=view)
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
         
         except Exception as e:
             await interaction.followup.send(f"❌ Errore nella creazione del ticket: {e}", ephemeral=True)
+
+class TicketPanelsView(discord.ui.View):
+    def __init__(self, panels, cog):
+        super().__init__(timeout=None)
+        self.panels = panels
+        self.cog = cog
+        
+        for panel in panels:
+            self.add_item(TicketPanelButton(panel, cog))
 
 class Tickets(commands.Cog):
     def __init__(self, bot):
@@ -134,7 +236,7 @@ class Tickets(commands.Cog):
                 channel = self.bot.get_channel(panel_ch_id)
                 if channel:
                     # Crea la view con i pulsanti
-                    view = TicketCategoryView(self.config.get("categories", []), self)
+                    view = TicketPanelsView(self.config.get("panels", []), self)
                     self.bot.add_view(view)
             except Exception as e:
                 print(f"Errore nel caricamento del pannello: {e}")
@@ -209,42 +311,44 @@ class Tickets(commands.Cog):
 
     @ticket_group.command(name="close", description="Chiude il ticket nel canale attuale")
     async def close_ticket(self, interaction: discord.Interaction):
-        """Chiude il ticket nel canale attuale"""
-        await interaction.response.defer()
+        """Chiude il ticket nel canale attuale (rimuove i permessi di scrittura)"""
         channel_id = str(interaction.channel.id)
         
         if channel_id not in self.tickets:
-            await interaction.followup.send("❌ Questo non è un canale ticket!")
+            await interaction.response.send_message("❌ Questo non è un canale ticket!", ephemeral=True)
             return
 
         ticket = self.tickets[channel_id]
         
-        # Verifica che sia l'autore o un admin
-        if interaction.user.id != ticket['author'] and not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("❌ Solo l'autore del ticket o un admin può chiuderlo!")
+        # Verifica che sia l'autore o un admin/staff
+        staff_role_id = self.config.get("staff_role_id")
+        is_staff = False
+        if staff_role_id:
+            staff_role = interaction.guild.get_role(staff_role_id)
+            is_staff = staff_role in interaction.user.roles if staff_role else False
+        
+        if interaction.user.id != ticket['author'] and not is_staff and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Solo l'autore del ticket, lo staff o un admin può chiuderlo!", ephemeral=True)
             return
 
-        # Chiudi il ticket
+        # Chiudi il ticket (toglie i permessi di scrittura ma non elimina il canale)
         ticket['status'] = 'closed'
         self.save_tickets()
 
+        # Rimuovi i permessi di scrittura al creatore del ticket
+        author = interaction.guild.get_member(ticket['author'])
+        if author:
+            await interaction.channel.set_permissions(author, read_messages=True, send_messages=False)
+
         embed = discord.Embed(
-            title="Ticket Chiuso",
-            description=f"Il ticket è stato chiuso da {interaction.user.mention}",
+            title="🔒 Ticket Chiuso",
+            description=f"Il ticket è stato chiuso da {interaction.user.mention}\nIl canale rimane visibile ma non puoi scrivere nuovi messaggi.",
             color=0xE74C3C
         )
-        await interaction.followup.send(embed=embed)
-
-        # Attendi un po' e poi elimina il canale
-        await interaction.channel.send("⏳ Eliminazione in corso tra 10 secondi...")
-        await asyncio.sleep(10)
+        await interaction.response.send_message(embed=embed)
         
-        try:
-            del self.tickets[channel_id]
-            self.save_tickets()
-            await interaction.channel.delete(reason=f"Ticket chiuso da {interaction.user}")
-        except Exception as e:
-            await interaction.channel.send(f"❌ Errore nell'eliminazione del canale: {e}")
+        # Aggiungi un messaggio nel canale
+        await interaction.channel.send(embed=embed)
 
     @ticket_group.command(name="add", description="Aggiungi un utente al ticket")
     async def add_member(self, interaction: discord.Interaction, member: discord.Member):
@@ -379,7 +483,7 @@ class Tickets(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="ticket_help", description="Mostra la guida ai comandi ticket")
+    @ticket_group.command(name="help", description="Mostra la guida ai comandi ticket")
     async def ticket_help(self, interaction: discord.Interaction):
         """Mostra la guida ai comandi"""
         embed = discord.Embed(
@@ -393,46 +497,120 @@ class Tickets(commands.Cog):
         embed.add_field(name="/ticket remove <utente>", value="Rimuovi un utente dal ticket", inline=False)
         embed.add_field(name="/ticket list", value="Mostra tutti i tuoi ticket aperti", inline=False)
         embed.add_field(name="/ticket panel", value="Mostra il pannello per creare ticket", inline=False)
+        embed.add_field(name="/ticket reopen", value="Riapri un ticket chiuso (solo staff)", inline=False)
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @ticket_group.command(name="panel", description="Mostra il pannello per creare ticket")
-    @app_commands.checks.has_permissions(administrator=True)
     async def ticket_panel(self, interaction: discord.Interaction):
         """Mostra il pannello interattivo per creare ticket"""
-        await interaction.response.defer()
-        
-        if not self.config.get("categories"):
-            await interaction.followup.send("❌ Nessuna categoria di ticket configurata in config.json!")
+        # Verifica permessi manualmente
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Solo gli admin possono eseguire questo comando!", ephemeral=True)
             return
         
-        # Crea l'embed del pannello
-        embed = discord.Embed(
-            title="📋 Pannello Ticket",
-            description="Clicca su uno dei pulsanti sottostanti per creare un ticket:",
-            color=0x3498DB
-        )
+        # SEMPRE defer() come prima cosa dopo il check
+        await interaction.response.defer(ephemeral=True)
         
-        for category in self.config["categories"]:
-            emoji = category.get("emoji", "📝")
-            embed.add_field(
-                name=f"{emoji} {category['name']}",
-                value=category.get('description', 'Nessuna descrizione'),
-                inline=False
+        try:
+            panels = self.config.get("panels", [])
+            if not panels:
+                await interaction.followup.send("❌ Nessun pannello configurato in config.json!")
+                return
+            
+            # Crea l'embed del pannello
+            embed = discord.Embed(
+                title="🎟️ Pannelli Ticket",
+                description="Clicca su uno dei pulsanti sottostanti per creare un ticket:",
+                color=0x3498DB
             )
+            
+            for panel in panels:
+                emoji = panel.get("emoji", "📝")
+                embed.add_field(
+                    name=f"{emoji} {panel['name']}",
+                    value=panel.get('description', 'Nessuna descrizione'),
+                    inline=False
+                )
+            
+            # Crea la view con i pulsanti
+            view = TicketPanelsView(panels, self)
+            
+            # Invia i pannelli al canale
+            channel = self.bot.get_channel(interaction.channel.id)
+            if channel:
+                message = await channel.send(embed=embed, view=view)
+                
+                # Salva le info
+                self.config["panel_message_id"] = message.id
+                self.config["panel_channel_id"] = channel.id
+                self.save_config()
+                
+                await interaction.followup.send("✅ Pannelli inviati!")
+            else:
+                await interaction.followup.send("❌ Errore: Canale non trovato")
         
-        # Crea la view con i pulsanti delle categorie
-        view = TicketCategoryView(self.config["categories"], self)
+        except Exception as e:
+            print(f"Errore in ticket_panel: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"❌ Errore: {str(e)}")
+            except:
+                print("Impossibile inviare messaggio di errore")
+
+    @ticket_group.command(name="reopen", description="Riapri un ticket chiuso (solo staff)")
+    async def reopen_ticket(self, interaction: discord.Interaction):
+        """Riapri un ticket chiuso"""
+        await interaction.response.defer()
+        channel_id = str(interaction.channel.id)
         
-        # Invia il messaggio
-        message = await interaction.followup.send(embed=embed, view=view)
+        if channel_id not in self.tickets:
+            await interaction.followup.send("❌ Questo non è un canale ticket!")
+            return
+
+        ticket = self.tickets[channel_id]
         
-        # Salva l'ID del messaggio e del canale in config
-        self.config["panel_message_id"] = message.id
-        self.config["panel_channel_id"] = interaction.channel.id
-        self.save_config()
+        # Verifica che sia staff o admin
+        staff_role_id = self.config.get("staff_role_id")
+        is_staff = False
+        if staff_role_id:
+            staff_role = interaction.guild.get_role(staff_role_id)
+            is_staff = staff_role in interaction.user.roles if staff_role else False
         
-        await interaction.followup.send("✅ Pannello salvato! Rimarrà attivo anche dopo i riavvii del bot.", ephemeral=True)
+        if not is_staff and not interaction.user.guild_permissions.administrator:
+            await interaction.followup.send("❌ Solo lo staff o un admin può riaprire i ticket!")
+            return
+        
+        if ticket['status'] != 'closed':
+            await interaction.followup.send("❌ Questo ticket non è chiuso!")
+            return
+
+        # Riapri il ticket
+        ticket['status'] = 'open'
+        self.save_tickets()
+
+        # Ripristina i permessi di scrittura al creatore del ticket
+        author = interaction.guild.get_member(ticket['author'])
+        if author:
+            await interaction.channel.set_permissions(author, read_messages=True, send_messages=True)
+
+        embed = discord.Embed(
+            title="🔓 Ticket Riaperto",
+            description=f"Il ticket è stato riaperto da {interaction.user.mention}\nPuoi scrivere nuovi messaggi.",
+            color=0x2ECC71
+        )
+        await interaction.followup.send(embed=embed)
+        
+        # Aggiungi un messaggio nel canale
+        await interaction.channel.send(embed=embed)
+
+    async def _save_config_async(self):
+        """Salva config in modo asincrono"""
+        try:
+            self.save_config()
+        except Exception as e:
+            print(f"Errore nel salvataggio config: {e}")
 
     def get_ticket_group(self):
         return self.ticket_group
