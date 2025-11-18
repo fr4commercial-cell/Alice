@@ -49,8 +49,16 @@ class TicketFormModal(ui.Modal):
         
         embed.set_footer(text=f"Ticket di {interaction.user}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
         
-        await interaction.channel.send(embed=embed)
-        await interaction.followup.send("✅ Informazioni registrate!", ephemeral=True)
+        try:
+            await interaction.channel.send(embed=embed)
+        except Exception as e:
+            print(f"Impossibile inviare embed nel canale dopo il submit del modal: {e}")
+
+        try:
+            await interaction.followup.send("✅ Informazioni registrate!", ephemeral=True)
+        except Exception:
+            # If followup fails, there's not much we can do; log and continue
+            print("Impossibile inviare followup dopo il submit del modal")
 
 class TicketPanelButton(discord.ui.Button):
     def __init__(self, panel_data, cog):
@@ -151,7 +159,10 @@ class TicketPanelButton(discord.ui.Button):
             # Invia il messaggio con i tag
             if len(mentions) > 1:
                 tag_message = " ".join(mentions)
-                await ticket_channel.send(f"📢 {tag_message}", allowed_mentions=discord.AllowedMentions(roles=True))
+                try:
+                    await ticket_channel.send(f"📢 {tag_message}", allowed_mentions=discord.AllowedMentions(roles=True))
+                except Exception as e:
+                    print(f"Impossibile inviare tag_message nel ticket: {e}")
             
             # Mostra il form modale automaticamente
             modal = TicketFormModal(self.panel_data, self.cog)
@@ -176,8 +187,16 @@ class TicketPanelButton(discord.ui.Button):
             view = discord.ui.View(timeout=None)
             view.add_item(button)
             
-            await ticket_channel.send(embed=instr_embed, view=view)
-            await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
+            try:
+                await ticket_channel.send(embed=instr_embed, view=view)
+            except Exception as e:
+                print(f"Impossibile inviare istruzioni nel ticket: {e}")
+
+            try:
+                await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
+            except Exception:
+                # If followup fails, just log
+                print("Impossibile inviare followup di conferma creazione ticket")
         
         except Exception as e:
             await interaction.followup.send(f"❌ Errore nella creazione del ticket: {e}", ephemeral=True)
@@ -192,6 +211,8 @@ class TicketPanelsView(discord.ui.View):
             self.add_item(TicketPanelButton(panel, cog))
 
 class Tickets(commands.Cog):
+    ticket_group = app_commands.Group(name="ticket", description="Gestisci i tuoi tickets")
+
     def __init__(self, bot):
         self.bot = bot
         self.tickets_file = 'tickets.json'
@@ -312,23 +333,36 @@ class Tickets(commands.Cog):
     @ticket_group.command(name="close", description="Chiude il ticket nel canale attuale")
     async def close_ticket(self, interaction: discord.Interaction):
         """Chiude il ticket nel canale attuale (rimuove i permessi di scrittura)"""
+        # Use defer + followup pattern for consistent interaction handling
+        try:
+            await interaction.response.defer()
+        except Exception:
+            # If already acknowledged, continue and use followup/channel fallbacks
+            pass
+
         channel_id = str(interaction.channel.id)
-        
+
         if channel_id not in self.tickets:
-            await interaction.response.send_message("❌ Questo non è un canale ticket!", ephemeral=True)
+            try:
+                await interaction.followup.send("❌ Questo non è un canale ticket!", ephemeral=True)
+            except Exception:
+                await interaction.channel.send("❌ Questo non è un canale ticket!")
             return
 
         ticket = self.tickets[channel_id]
-        
+
         # Verifica che sia l'autore o un admin/staff
         staff_role_id = self.config.get("staff_role_id")
         is_staff = False
         if staff_role_id:
             staff_role = interaction.guild.get_role(staff_role_id)
             is_staff = staff_role in interaction.user.roles if staff_role else False
-        
+
         if interaction.user.id != ticket['author'] and not is_staff and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Solo l'autore del ticket, lo staff o un admin può chiuderlo!", ephemeral=True)
+            try:
+                await interaction.followup.send("❌ Solo l'autore del ticket, lo staff o un admin può chiuderlo!", ephemeral=True)
+            except Exception:
+                await interaction.channel.send("❌ Solo l'autore del ticket, lo staff o un admin può chiuderlo!")
             return
 
         # Chiudi il ticket (toglie i permessi di scrittura ma non elimina il canale)
@@ -345,221 +379,235 @@ class Tickets(commands.Cog):
             description=f"Il ticket è stato chiuso da {interaction.user.mention}\nIl canale rimane visibile ma non puoi scrivere nuovi messaggi.",
             color=0xE74C3C
         )
-        await interaction.response.send_message(embed=embed)
-        
-        # Aggiungi un messaggio nel canale
-        await interaction.channel.send(embed=embed)
 
-    @ticket_group.command(name="add", description="Aggiungi un utente al ticket")
-    async def add_member(self, interaction: discord.Interaction, member: discord.Member):
-        """Aggiungi un utente al ticket"""
-        await interaction.response.defer()
-        channel_id = str(interaction.channel.id)
-        
-        if channel_id not in self.tickets:
-            await interaction.followup.send("❌ Questo non è un canale ticket!")
-            return
-
-        ticket = self.tickets[channel_id]
-        
-        # Verifica i permessi
-        if interaction.user.id != ticket['author'] and not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("❌ Solo l'autore del ticket o un admin può aggiungere utenti!")
-            return
-
-        if member.id in ticket['members']:
-            await interaction.followup.send("❌ Questo utente è già nel ticket!")
-            return
-
-        # Aggiungi l'utente
-        ticket['members'].append(member.id)
-        self.save_tickets()
-
-        # Aggiorna i permessi del canale
-        await interaction.channel.set_permissions(member, read_messages=True, send_messages=True)
-
-        embed = discord.Embed(
-            title="Utente Aggiunto",
-            description=f"{member.mention} è stato aggiunto al ticket",
-            color=0x2ECC71
-        )
-        await interaction.followup.send(embed=embed)
-
-    @ticket_group.command(name="remove", description="Rimuovi un utente dal ticket")
-    async def remove_member(self, interaction: discord.Interaction, member: discord.Member):
-        """Rimuovi un utente dal ticket"""
-        await interaction.response.defer()
-        channel_id = str(interaction.channel.id)
-        
-        if channel_id not in self.tickets:
-            await interaction.followup.send("❌ Questo non è un canale ticket!")
-            return
-
-        ticket = self.tickets[channel_id]
-        
-        # Verifica i permessi
-        if interaction.user.id != ticket['author'] and not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("❌ Solo l'autore del ticket o un admin può rimuovere utenti!")
-            return
-
-        if member.id not in ticket['members']:
-            await interaction.followup.send("❌ Questo utente non è nel ticket!")
-            return
-
-        # Rimuovi l'utente
-        ticket['members'].remove(member.id)
-        self.save_tickets()
-
-        # Rimuovi i permessi del canale
-        await interaction.channel.set_permissions(member, overwrite=None)
-
-        embed = discord.Embed(
-            title="Utente Rimosso",
-            description=f"{member.mention} è stato rimosso dal ticket",
-            color=0xE74C3C
-        )
-        await interaction.followup.send(embed=embed)
-
-    @ticket_group.command(name="addstaff", description="Aggiungi il ruolo staff al ticket")
-    @owner_or_has_permissions(administrator=True)
-    async def add_staff_role(self, interaction: discord.Interaction):
-        """Aggiungi il ruolo staff al ticket attuale"""
-        await interaction.response.defer()
-        channel_id = str(interaction.channel.id)
-        
-        if channel_id not in self.tickets:
-            await interaction.followup.send("❌ Questo non è un canale ticket!")
-            return
-
-        staff_role_id = self.config.get("staff_role_id")
-        if not staff_role_id:
-            await interaction.followup.send("❌ Ruolo staff non configurato in config.json!")
-            return
-
-        staff_role = interaction.guild.get_role(staff_role_id)
-        if not staff_role:
-            await interaction.followup.send("❌ Ruolo staff non trovato nel server!")
-            return
-
-        # Aggiungi i permessi al ruolo
-        await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=True)
-
-        embed = discord.Embed(
-            title="Ruolo Staff Aggiunto",
-            description=f"{staff_role.mention} può ora visualizzare e scrivere in questo ticket",
-            color=0x2ECC71
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @ticket_group.command(name="list", description="Mostra tutti i tuoi ticket aperti")
-    @owner_or_has_permissions(administrator=True)
-    async def list_tickets(self, interaction: discord.Interaction):
-        """Mostra tutti i tuoi ticket aperti"""
-        await interaction.response.defer()
-        user_tickets = [
-            (tid, t) for tid, t in self.tickets.items() 
-            if t['author'] == interaction.user.id and t['status'] == 'open'
-        ]
-
-        if not user_tickets:
-            await interaction.followup.send("❌ Non hai ticket aperti!")
-            return
-
-        embed = discord.Embed(
-            title="I Tuoi Ticket Aperti",
-            description=f"Totale: {len(user_tickets)}",
-            color=0x3498DB
-        )
-
-        for ticket_id, ticket in user_tickets:
-            channel = interaction.guild.get_channel(int(ticket_id))
-            if channel:
-                created_date = datetime.fromisoformat(ticket['created_at']).strftime("%d/%m/%Y %H:%M")
-                embed.add_field(
-                    name=f"{ticket['topic']}",
-                    value=f"ID: {ticket_id}\nCreato: {created_date}\nCanale: {channel.mention}",
-                    inline=False
-                )
-
-        await interaction.followup.send(embed=embed)
-
-    @ticket_group.command(name="help", description="Mostra la guida ai comandi ticket")
-    async def ticket_help(self, interaction: discord.Interaction):
-        """Mostra la guida ai comandi"""
-        embed = discord.Embed(
-            title="Sistema Tickets",
-            description="Usa i comandi seguenti:",
-            color=0x3498DB
-        )
-        embed.add_field(name="/ticket create <argomento>", value="Crea un nuovo ticket", inline=False)
-        embed.add_field(name="/ticket close", value="Chiude il ticket nel canale attuale", inline=False)
-        embed.add_field(name="/ticket add <utente>", value="Aggiungi un utente al ticket", inline=False)
-        embed.add_field(name="/ticket remove <utente>", value="Rimuovi un utente dal ticket", inline=False)
-        embed.add_field(name="/ticket list", value="Mostra tutti i tuoi ticket aperti", inline=False)
-        embed.add_field(name="/ticket panel", value="Mostra il pannello per creare ticket", inline=False)
-        embed.add_field(name="/ticket reopen", value="Riapri un ticket chiuso (solo staff)", inline=False)
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @ticket_group.command(name="panel", description="Mostra il pannello per creare ticket")
-    async def ticket_panel(self, interaction: discord.Interaction):
-        """Mostra il pannello interattivo per creare ticket"""
-        # Verifica permessi manualmente
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Solo gli admin possono eseguire questo comando!", ephemeral=True)
-            return
-        
-        # SEMPRE defer() come prima cosa dopo il check
-        await interaction.response.defer(ephemeral=True)
-        
+        # Notify user via followup and post the embed in the channel
         try:
-            panels = self.config.get("panels", [])
-            if not panels:
-                await interaction.followup.send("❌ Nessun pannello configurato in config.json!")
-                return
-            
-            # Crea l'embed del pannello
-            embed = discord.Embed(
-                title="🎟️ Pannelli Ticket",
-                description="Clicca su uno dei pulsanti sottostanti per creare un ticket:",
-                color=0x3498DB
-            )
-            
-            for panel in panels:
-                emoji = panel.get("emoji", "📝")
-                embed.add_field(
-                    name=f"{emoji} {panel['name']}",
-                    value=panel.get('description', 'Nessuna descrizione'),
-                    inline=False
-                )
-            
-            # Crea la view con i pulsanti
-            view = TicketPanelsView(panels, self)
-            
-            # Invia i pannelli al canale
-            channel = self.bot.get_channel(interaction.channel.id)
-            if channel:
-                message = await channel.send(embed=embed, view=view)
-                
-                # Salva le info
-                self.config["panel_message_id"] = message.id
-                self.config["panel_channel_id"] = channel.id
-                self.save_config()
-                
-                await interaction.followup.send("✅ Pannelli inviati!")
-            else:
-                await interaction.followup.send("❌ Errore: Canale non trovato")
-        
-        except Exception as e:
-            print(f"Errore in ticket_panel: {e}")
-            import traceback
-            traceback.print_exc()
+            await interaction.followup.send("✅ Ticket chiuso.", ephemeral=True)
+        except Exception:
             try:
-                await interaction.followup.send(f"❌ Errore: {str(e)}")
-            except:
-                print("Impossibile inviare messaggio di errore")
+                await interaction.channel.send("✅ Ticket chiuso.")
+            except Exception:
+                pass
 
-    @ticket_group.command(name="reopen", description="Riapri un ticket chiuso (solo staff)")
+        try:
+            await interaction.channel.send(embed=embed)
+        except Exception:
+            pass
+
+@commands.command()
+async def add_member(self, interaction: discord.Interaction, member: discord.Member):
+    """Aggiungi un utente al ticket"""
+    await interaction.response.defer()
+    channel_id = str(interaction.channel.id)
+    
+    if channel_id not in self.tickets:
+        await interaction.followup.send("❌ Questo non è un canale ticket!")
+        return
+
+    ticket = self.tickets[channel_id]
+    
+    # Verifica i permessi
+    if interaction.user.id != ticket['author'] and not interaction.user.guild_permissions.administrator:
+        await interaction.followup.send("❌ Solo l'autore del ticket o un admin può aggiungere utenti!")
+        return
+
+    if member.id in ticket['members']:
+        await interaction.followup.send("❌ Questo utente è già nel ticket!")
+        return
+
+    # Aggiungi l'utente
+    ticket['members'].append(member.id)
+    self.save_tickets()
+
+    # Aggiorna i permessi del canale
+    await interaction.channel.set_permissions(member, read_messages=True, send_messages=True)
+
+    embed = discord.Embed(
+        title="Utente Aggiunto",
+        description=f"{member.mention} è stato aggiunto al ticket",
+        color=0x2ECC71
+    )
+    await interaction.followup.send(embed=embed)
+
+@commands.command()
+async def remove_member(self, interaction: discord.Interaction, member: discord.Member):
+    """Rimuovi un utente dal ticket"""
+    await interaction.response.defer()
+    channel_id = str(interaction.channel.id)
+    
+    if channel_id not in self.tickets:
+        await interaction.followup.send("❌ Questo non è un canale ticket!")
+        return
+
+    ticket = self.tickets[channel_id]
+    
+    # Verifica i permessi
+    if interaction.user.id != ticket['author'] and not interaction.user.guild_permissions.administrator:
+        await interaction.followup.send("❌ Solo l'autore del ticket o un admin può rimuovere utenti!")
+        return
+
+    if member.id not in ticket['members']:
+        await interaction.followup.send("❌ Questo utente non è nel ticket!")
+        return
+
+    # Rimuovi l'utente
+    ticket['members'].remove(member.id)
+    self.save_tickets()
+
+    # Rimuovi i permessi del canale
+    await interaction.channel.set_permissions(member, overwrite=None)
+
+    embed = discord.Embed(
+        title="Utente Rimosso",
+        description=f"{member.mention} è stato rimosso dal ticket",
+        color=0xE74C3C
+    )
+    await interaction.followup.send(embed=embed)
+
+@commands.command()
+@owner_or_has_permissions(administrator=True)
+async def add_staff_role(self, interaction: discord.Interaction):
+    """Aggiungi il ruolo staff al ticket attuale"""
+    await interaction.response.defer()
+    channel_id = str(interaction.channel.id)
+    
+    if channel_id not in self.tickets:
+        await interaction.followup.send("❌ Questo non è un canale ticket!")
+        return
+
+    staff_role_id = self.config.get("staff_role_id")
+    if not staff_role_id:
+        await interaction.followup.send("❌ Ruolo staff non configurato in config.json!")
+        return
+
+    staff_role = interaction.guild.get_role(staff_role_id)
+    if not staff_role:
+        await interaction.followup.send("❌ Ruolo staff non trovato nel server!")
+        return
+
+    # Aggiungi i permessi al ruolo
+    await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=True)
+
+    embed = discord.Embed(
+        title="Ruolo Staff Aggiunto",
+        description=f"{staff_role.mention} può ora visualizzare e scrivere in questo ticket",
+        color=0x2ECC71
+    )
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+@commands.command()
+@owner_or_has_permissions(administrator=True)
+async def list_tickets(self, interaction: discord.Interaction):
+    """Mostra tutti i tuoi ticket aperti"""
+    await interaction.response.defer()
+    user_tickets = [
+        (tid, t) for tid, t in self.tickets.items() 
+        if t['author'] == interaction.user.id and t['status'] == 'open'
+    ]
+
+    if not user_tickets:
+        await interaction.followup.send("❌ Non hai ticket aperti!")
+        return
+
+    embed = discord.Embed(
+        title="I Tuoi Ticket Aperti",
+        description=f"Totale: {len(user_tickets)}",
+        color=0x3498DB
+    )
+
+    for ticket_id, ticket in user_tickets:
+        channel = interaction.guild.get_channel(int(ticket_id))
+        if channel:
+            created_date = datetime.fromisoformat(ticket['created_at']).strftime("%d/%m/%Y %H:%M")
+            embed.add_field(
+                name=f"{ticket['topic']}",
+                value=f"ID: {ticket_id}\nCreato: {created_date}\nCanale: {channel.mention}",
+                inline=False
+            )
+
+    await interaction.followup.send(embed=embed)
+
+@commands.command()
+async def ticket_help(self, interaction: discord.Interaction):
+    """Mostra la guida ai comandi"""
+    embed = discord.Embed(
+        title="Sistema Tickets",
+        description="Usa i comandi seguenti:",
+        color=0x3498DB
+    )
+    embed.add_field(name="/ticket create <argomento>", value="Crea un nuovo ticket", inline=False)
+    embed.add_field(name="/ticket close", value="Chiude il ticket nel canale attuale", inline=False)
+    embed.add_field(name="/ticket add <utente>", value="Aggiungi un utente al ticket", inline=False)
+    embed.add_field(name="/ticket remove <utente>", value="Rimuovi un utente dal ticket", inline=False)
+    embed.add_field(name="/ticket list", value="Mostra tutti i tuoi ticket aperti", inline=False)
+    embed.add_field(name="/ticket panel", value="Mostra il pannello per creare ticket", inline=False)
+    embed.add_field(name="/ticket reopen", value="Riapri un ticket chiuso (solo staff)", inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@commands.command()
+async def ticket_panel(self, interaction: discord.Interaction):
+    """Mostra il pannello interattivo per creare ticket"""
+    # Verifica permessi manualmente
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Solo gli admin possono eseguire questo comando!", ephemeral=True)
+        return
+    
+    # SEMPRE defer() come prima cosa dopo il check
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        panels = self.config.get("panels", [])
+        if not panels:
+            await interaction.followup.send("❌ Nessun pannello configurato in config.json!")
+            return
+        
+        # Crea l'embed del pannello
+        embed = discord.Embed(
+            title="🎟️ Pannelli Ticket",
+            description="Clicca su uno dei pulsanti sottostanti per creare un ticket:",
+            color=0x3498DB
+        )
+        
+        for panel in panels:
+            emoji = panel.get("emoji", "📝")
+            embed.add_field(
+                name=f"{emoji} {panel['name']}",
+                value=panel.get('description', 'Nessuna descrizione'),
+                inline=False
+            )
+        
+        # Crea la view con i pulsanti
+        view = TicketPanelsView(panels, self)
+        
+        # Invia i pannelli al canale
+        channel = self.bot.get_channel(interaction.channel.id)
+        if channel:
+            message = await channel.send(embed=embed, view=view)
+            
+            # Salva le info
+            self.config["panel_message_id"] = message.id
+            self.config["panel_channel_id"] = channel.id
+            self.save_config()
+            
+            await interaction.followup.send("✅ Pannelli inviati!")
+        else:
+            await interaction.followup.send("❌ Errore: Canale non trovato")
+    
+    except Exception as e:
+        print(f"Errore in ticket_panel: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await interaction.followup.send(f"❌ Errore: {str(e)}")
+        except:
+            pass
+
+    @classmethod
+    def ticket_group_command(cls, *args, **kwargs):
+        return cls.ticket_group.command(*args, **kwargs)
+
+    @Tickets.ticket_group.command(name="reopen", description="Riapri un ticket chiuso (solo staff)")
     async def reopen_ticket(self, interaction: discord.Interaction):
         """Riapri un ticket chiuso"""
         await interaction.response.defer()
@@ -600,10 +648,77 @@ class Tickets(commands.Cog):
             description=f"Il ticket è stato riaperto da {interaction.user.mention}\nPuoi scrivere nuovi messaggi.",
             color=0x2ECC71
         )
-        await interaction.followup.send(embed=embed)
-        
+        try:
+            await interaction.followup.send(embed=embed)
+        except Exception:
+            try:
+                await interaction.channel.send("✅ Ticket riaperto.")
+            except Exception:
+                print("Impossibile inviare followup o messaggio nel canale al riaprire ticket")
+
         # Aggiungi un messaggio nel canale
-        await interaction.channel.send(embed=embed)
+        try:
+            await interaction.channel.send(embed=embed)
+        except Exception as e:
+            print(f"Impossibile inviare embed nel canale al riaprire ticket: {e}")
+        except Exception as e:
+            print(f"Impossibile inviare embed nel canale al riaprire ticket: {e}")
+
+    @Tickets.ticket_group.command(name="delete", description="Elimina definitivamente il ticket (solo staff)")
+    async def delete_ticket(self, interaction: discord.Interaction):
+        """Elimina definitivamente il ticket e rimuove l'entry dal file"""
+        channel_id = str(interaction.channel.id)
+
+        # Prova a deferire l'interazione per evitare "Unknown interaction"
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            # Se già acked o errore, prosegui e usa followup/channel fallbacks
+            pass
+
+        if channel_id not in self.tickets:
+            try:
+                await interaction.followup.send("❌ Questo non è un canale ticket!", ephemeral=True)
+            except Exception:
+                await interaction.channel.send("❌ Questo non è un canale ticket!")
+            return
+
+        # Verifica che sia staff o admin
+        staff_role_id = self.config.get("staff_role_id")
+        is_staff = False
+        if staff_role_id:
+            staff_role = interaction.guild.get_role(staff_role_id)
+            is_staff = staff_role in interaction.user.roles if staff_role else False
+
+        if not is_staff and not interaction.user.guild_permissions.administrator:
+            try:
+                await interaction.followup.send("❌ Solo lo staff o un admin può eliminare i ticket!", ephemeral=True)
+            except Exception:
+                await interaction.channel.send("❌ Solo lo staff o un admin può eliminare i ticket!")
+            return
+
+        # Conferma all'utente (followup perché abbiamo deferito)
+        try:
+            await interaction.followup.send("⏳ Eliminazione in corso...", ephemeral=True)
+        except Exception:
+            try:
+                await interaction.channel.send("⏳ Eliminazione in corso...")
+            except Exception:
+                pass
+
+        try:
+            # Rimuovi l'entry dal registro dei ticket
+            del self.tickets[channel_id]
+            self.save_tickets()
+
+            # Elimina il canale
+            await interaction.channel.delete(reason=f"Ticket eliminato da {interaction.user}")
+        except Exception as e:
+            # Log e tentativo di notifica nel canale
+            try:
+                await interaction.channel.send(f"❌ Errore nell'eliminazione del canale: {e}")
+            except Exception:
+                print(f"Errore nell'eliminazione del canale: {e}")
 
     async def _save_config_async(self):
         """Salva config in modo asincrono"""

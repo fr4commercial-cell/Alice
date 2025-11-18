@@ -1,98 +1,111 @@
-import discord
-from discord.ext import commands
 import json
 import os
-from datetime import datetime
+from pathlib import Path
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
 
 class Counting(commands.Cog):
-    def __init__(self, bot):
+    counting_group = app_commands.Group(name="counting", description="Counting commands")
+
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.file = "counting.json"
+        self.data = {}
         self._load()
 
     def _load(self):
         if os.path.exists(self.file):
-            with open(self.file, "r", encoding="utf-8") as f:
-                try:
+            try:
+                with open(self.file, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
-                except Exception:
-                    self.data = {"channel_id": None, "count": 0}
+            except Exception:
+                self.data = {}
         else:
-            self.data = {"channel_id": None, "count": 0}
-
-        # Assicura che gli ID siano stringhe (compatibilità strumenti esterni)
-        if "channel_id" in self.data and self.data["channel_id"] is not None:
-            self.data["channel_id"] = str(self.data["channel_id"])
-        if "count" not in self.data:
-            self.data["count"] = 0
+            self.data = {}
 
     def _save(self):
         with open(self.file, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=4, ensure_ascii=False)
+            json.dump(self.data, f, ensure_ascii=False, indent=2)
 
-    @commands.hybrid_command(name="setcountchannel", with_app_command=True)
-    @commands.has_permissions(administrator=True)
-    async def set_count_channel(self, ctx, channel: discord.TextChannel):
-        """Imposta il canale dove funziona il counting (admin only)."""
-        self.data["channel_id"] = str(channel.id)
-        self.data["count"] = 0
+    @counting_group.command(name="set", description="Setta il canale di counting e il valore iniziale")
+    @app_commands.describe(channel="Canale di testo dove abilitare il counting", start="Valore di partenza (default 0)")
+    async def set_count_channel(self, interaction: discord.Interaction, channel: discord.TextChannel, start: int = 0):
+        if not (interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_guild):
+            await interaction.response.send_message("❌ Devi essere un amministratore o avere Manage Guild.", ephemeral=True)
+            return
+        guild_id = str(interaction.guild.id)
+        next_num = start + 1
+        self.data[guild_id] = {
+            "channel_id": str(channel.id),
+            "last": int(next_num)
+        }
         self._save()
-        await ctx.reply(f"✅ Canale counting impostato su {channel.mention}. Contatore azzerato.")
+        await interaction.response.send_message(f"✅ Counting impostato su {channel.mention}. Messaggio iniziale: `{next_num}`", ephemeral=True)
+        try:
+            await channel.send(str(next_num))
+        except Exception as e:
+            print(f"Errore inviando il messaggio nel canale di counting: {e}")
 
-    @commands.hybrid_command(name="getcount", with_app_command=True)
-    async def get_count(self, ctx):
-        """Mostra l'ultimo numero salvato."""
-        count = self.data.get("count", 0)
-        await ctx.reply(f"📊 Ultimo numero salvato: {count}")
+    @counting_group.command(name="unset", description="Disattiva il counting per questo server")
+    async def unset_count_channel(self, interaction: discord.Interaction):
+        if not (interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_guild):
+            await interaction.response.send_message("❌ Devi essere un amministratore o avere Manage Guild.", ephemeral=True)
+            return
+        guild_id = str(interaction.guild.id)
+        if guild_id in self.data:
+            del self.data[guild_id]
+            self._save()
+            await interaction.response.send_message("✅ Counting disattivato per questo server.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Nessun canale di counting impostato per questo server.", ephemeral=True)
 
-    @commands.hybrid_command(name="resetcount", with_app_command=True)
-    @commands.has_permissions(administrator=True)
-    async def reset_count(self, ctx, value: int = 0):
-        """Resetta il contatore (admin only)."""
-        self.data["count"] = value
-        self._save()
-        await ctx.reply(f"🔄 Contatore resettato a {value}.")
+    @counting_group.command(name="info", description="Mostra info counting per questo server")
+    async def info_counting(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id)
+        conf = self.data.get(guild_id)
+        if not conf:
+            await interaction.response.send_message("❌ Counting non attivo su questo server.", ephemeral=True)
+            return
+        channel_id = conf.get("channel_id")
+        last = conf.get("last", 0)
+        await interaction.response.send_message(f"Counting attivo su <#{channel_id}>. Ultimo numero: `{last}`", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignora bot e messaggi DMs
-        if message.author.bot or not message.guild:
+        if message.author.bot or message.guild is None:
             return
-
-        channel_id = self.data.get("channel_id")
-        if not channel_id:
+        guild_id = str(message.guild.id)
+        conf = self.data.get(guild_id)
+        if not conf:
             return
-
-        # Confronto come int (channel_id è una stringa salvata)
-        if message.channel.id != int(channel_id):
+        channel_id = conf.get("channel_id")
+        if channel_id != str(message.channel.id):
             return
-
         content = message.content.strip()
         try:
-            number = int(content)
+            num = int(content)
         except ValueError:
-            # Non è un numero: rimuovi il messaggio
             try:
                 await message.delete()
             except Exception:
                 pass
             return
-
-        expected = self.data.get("count", 0) + 1
-        if number == expected:
-            self.data["count"] = number
+        expected = int(conf.get("last", 0)) + 1
+        if num == expected:
+            conf["last"] = int(num)
             self._save()
-            # opzionale: reagisci per conferma
             try:
-                await message.add_reaction("✅")
+                await message.add_reaction("\u2705")
             except Exception:
                 pass
         else:
-            # numero sbagliato: elimina il messaggio e (opzionale) invia DM
             try:
                 await message.delete()
             except Exception:
                 pass
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Counting(bot))
