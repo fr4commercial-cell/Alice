@@ -1,74 +1,48 @@
 {
-  "staff_role_id": "1381342392161931444",
+  "staff_role_id": 123456789012345678,
   "panels": [
     {
       "name": "Supporto Discord",
-      "emoji": "🆘",
+      "emoji": "💬",
+      "description": "Apri un ticket per supporto Discord.",
       "color": 3447003,
-      "description": "Ricevi supporto per problemi su Discord",
-      "image": "https://discord.com/assets/f8389ca1a741a115313bda9a82daf1dd.png",
+      "image": "",
       "fields": [
-        {
-          "name": "Descrizione Problema",
-          "placeholder": "Descrivi il tuo problema..."
-        },
-        {
-          "name": "Screenshot/Video",
-          "placeholder": "Condividi screenshot o link video..."
-        }
+        {"name": "Descrivi il problema", "placeholder": "Spiega il tuo problema..."}
       ]
     },
     {
-      "name": "Richiesta CW",
-      "emoji": "🎖️",
-      "color": 16776960,
-      "description": "Richiedi una ClanWar",
-      "image": "https://cdn-icons-png.flaticon.com/512/827/827545.png",
+      "name": "Supporto Twitch",
+      "emoji": "📺",
+      "description": "Apri un ticket per supporto Twitch.",
+      "color": 10181046,
+      "image": "",
       "fields": [
-        {
-          "name": "Nome Clan",
-          "placeholder": "Nome del tuo clan..."
-        },
-        {
-          "name": "Tag Clan",
-          "placeholder": "Tag del clan (es: #ABC123)..."
-        },
-        {
-          "name": "Dimensione Squadra",
-          "placeholder": "Numero di giocatori..."
-        },
-        {
-          "name": "Avversari",
-          "placeholder": "Che tipo di avversari cerchi?..."
-        }
+        {"name": "Link canale Twitch", "placeholder": "https://twitch.tv/..."},
+        {"name": "Descrivi la richiesta", "placeholder": "Dettagli..."}
       ]
     },
     {
-      "name": "Join Clan",
+      "name": "Clan",
       "emoji": "⚔️",
-      "color": 16711680,
-      "description": "Richiedi di entrare in un clan",
-      "image": "https://cdn-icons-png.flaticon.com/512/3556/3556098.png",
+      "description": "Ticket per entrare nel clan.",
+      "color": 15105570,
+      "image": "",
       "fields": [
-        {
-          "name": "Nome Giocatore",
-          "placeholder": "Il tuo nome di gioco..."
-        },
-        {
-          "name": "Tag",
-          "placeholder": "Il tuo tag personale..."
-        },
-        {
-          "name": "Clan di Interesse",
-          "placeholder": "A quale clan vuoi unirti?..."
-        },
-        {
-          "name": "Esperienza",
-          "placeholder": "Descrivi la tua esperienza..."
-        }
+        {"name": "Nick in game", "placeholder": "Il tuo nickname..."},
+        {"name": "Motivazione", "placeholder": "Perché vuoi entrare nel clan?"}
+      ]
+    },
+    {
+      "name": "Richiesta ClanWar",
+      "emoji": "⚔️",
+      "description": "Ticket per richiedere una ClanWar.",
+      "color": 15105570,
+      "image": "",
+      "fields": [
+        {"name": "Nick in game", "placeholder": "Il tuo nickname..."},
+        {"name": "Dettagli ClanWar", "placeholder": "Dettagli sulla ClanWar richiesta..."}
       ]
     }
-  ],
-  "panel_message_id": 1440061215794790500,
-  "panel_channel_id": 1439021040402567171
+  ]
 }

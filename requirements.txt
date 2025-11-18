@@ -1,2 +1,11 @@
 discord.py==2.3.2
-python-dotenv==1.0.0
+python-dotenv
+nextcord
+python-dotenv
+colorama
+ffmpeg-python
+requests
+loguru
+PyNaCl
+aiosqlite
+Pillow
