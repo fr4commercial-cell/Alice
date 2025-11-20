@@ -8,7 +8,37 @@ import time
 from typing import Optional, Tuple
 
 from bot_utils import owner_or_has_permissions
-from json_store import load_json, save_json
+import asyncio
+
+# Local async JSON helpers (fallback when json_store is unavailable)
+async def load_json(path: str, default):
+    try:
+        return await asyncio.to_thread(_read_json_file, path, default)
+    except Exception:
+        return default
+
+def _read_json_file(path: str, default):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        return default
+
+async def save_json(path: str, data):
+    try:
+        await asyncio.to_thread(_write_json_file, path, data)
+    except Exception:
+        pass
+
+def _write_json_file(path: str, data):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'levels.json')
 DATA_PATH = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')), 'data', 'levels.json')
@@ -23,6 +53,7 @@ def load_config():
             "enabled": True,
             "text_xp": {"min": 5, "max": 15, "cooldown_seconds": 60, "excluded_channel_ids": [], "excluded_role_ids": [], "multiplier_roles": {}},
             "voice_xp": {"enabled": True, "per_min_min": 2, "per_min_max": 5, "exclude_muted": True, "exclude_deaf": True, "exclude_afk_channel_ids": [], "excluded_role_ids": [], "multiplier_roles": {}},
+            "announce_channel_id": None,
             "leaderboard": {"page_size": 10},
             "rank_card": {"width": 934, "height": 282, "background": "assets/rankcard/rank_black.png", "bar_color": "#14ff72", "bar_bg": "#1f1f1f", "text_color": "#ffffff", "font_path": "assets/rankcard/Roboto-Bold.ttf"}
         }
@@ -59,6 +90,28 @@ class LevelsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.config = load_config()
+
+    def save_config(self):
+        try:
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    async def _announce_level_up(self, guild: discord.Guild, member: discord.Member, level: int, mode_label: str):
+        channel_id = self.config.get('announce_channel_id')
+        if not channel_id:
+            return
+        try:
+            ch = guild.get_channel(int(channel_id)) or await guild.fetch_channel(int(channel_id))
+        except Exception:
+            return
+        if not ch:
+            return
+        try:
+            await ch.send(f"🎉 {member.mention} ha raggiunto il livello {level} ({mode_label})!")
+        except Exception:
+            pass
 
     def cog_unload(self):
         try:
@@ -99,12 +152,21 @@ class LevelsCog(commands.Cog):
         mult = get_multiplier(message.author, text_cfg.get('multiplier_roles', {}))
         amount = int(amount * mult)
 
-        u['text_xp'] = int(u.get('text_xp', 0)) + amount
+        # Level-up detection (text)
+        prev_total = int(u.get('text_xp', 0))
+        prev_level, _, _ = level_from_xp(prev_total)
+
+        u['text_xp'] = prev_total + amount
         u['last_msg_xp_at'] = now
         users[uid] = u
         g['users'] = users
         data[gid] = g
         await save_json(DATA_PATH, data)
+
+        # Announce if level increased
+        new_level, _, _ = level_from_xp(u['text_xp'])
+        if new_level > prev_level and isinstance(message.author, discord.Member):
+            await self._announce_level_up(message.guild, message.author, new_level, 'Testo')
 
     @tasks.loop(minutes=1)
     async def voice_loop(self):
@@ -136,11 +198,17 @@ class LevelsCog(commands.Cog):
                             g = data.get(gid, {})
                             users = g.get('users', {})
                             u = users.get(uid, {"text_xp": 0, "voice_xp": 0, "last_msg_xp_at": 0})
-                            u['voice_xp'] = int(u.get('voice_xp', 0)) + amount
+                            # Level-up detection (voice)
+                            prev_total_v = int(u.get('voice_xp', 0))
+                            prev_level_v, _, _ = level_from_xp(prev_total_v)
+                            u['voice_xp'] = prev_total_v + amount
                             users[uid] = u
                             g['users'] = users
                             data[gid] = g
                             await save_json(DATA_PATH, data)
+                            new_level_v, _, _ = level_from_xp(u['voice_xp'])
+                            if new_level_v > prev_level_v:
+                                await self._announce_level_up(guild, m, new_level_v, 'Voice')
         except Exception:
             pass
 
@@ -229,6 +297,37 @@ class LevelsCog(commands.Cog):
             desc.append(f"**#{i}** {user.mention if user else uid} — {xp} XP")
         embed = discord.Embed(title=f"Classifica {mode.capitalize()}", description='\n'.join(desc), color=0x14ff72)
         await interaction.followup.send(embed=embed)
+
+    @level.command(name='setchannel', description='Imposta il canale per gli annunci di level-up (admin o manage_guild)')
+    @owner_or_has_permissions(administrator=True)
+    @app_commands.describe(channel='Canale dove annunciare i level-up')
+    async def slash_setchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        self.config['announce_channel_id'] = str(channel.id)
+        self.save_config()
+        await interaction.response.send_message(f'✅ Canale di annunci impostato su {channel.mention}.', ephemeral=True)
+
+    @level.command(name='stats', description='Mostra le statistiche di livello (text/voice)')
+    @app_commands.describe(user='Utente da mostrare', mode='text o voice')
+    async def slash_stats(self, interaction: discord.Interaction, user: Optional[discord.Member] = None, mode: Optional[str] = 'text'):
+        member = user or interaction.user
+        mode = (mode or 'text').lower()
+        if mode not in ('text', 'voice'):
+            mode = 'text'
+        data = await load_json(DATA_PATH, {})
+        gid = str(interaction.guild.id)
+        uid = str(member.id)
+        users = data.get(gid, {}).get('users', {})
+        u = users.get(uid, {"text_xp": 0, "voice_xp": 0})
+        total_xp = int(u.get('text_xp', 0)) if mode == 'text' else int(u.get('voice_xp', 0))
+        level, cur_xp, needed = level_from_xp(total_xp)
+        remaining = max(0, needed - cur_xp)
+        embed = discord.Embed(title=f"Statistiche {mode.capitalize()}", color=0x14ff72)
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.add_field(name='Livello', value=str(level))
+        embed.add_field(name='XP attuale', value=str(total_xp))
+        embed.add_field(name='XP nel livello', value=f"{cur_xp}/{needed}")
+        embed.add_field(name='XP mancanti al prossimo', value=str(remaining), inline=False)
+        await interaction.response.send_message(embed=embed)
 
     @level.command(name='givexp', description='Dai XP a un utente (solo admin)')
     @owner_or_has_permissions(administrator=True)
