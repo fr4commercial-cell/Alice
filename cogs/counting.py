@@ -230,3 +230,31 @@ def setup(bot: commands.Bot):
 # Added async setup function
 async def setup(bot):
     await bot.add_cog(Counting(bot))
+    async def _delete_and_error(self, message, chan_conf, guild_id, reason):
+        try:
+            await message.delete()
+        except:
+            pass
+
+        # Reset counter
+        chan_conf["last"] = 0
+        chan_conf["last_user"] = None
+        self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
+
+        # Emoji error
+        emoji = self._get_emoji(message.guild, "error_emoji") or "❌"
+
+        # Reason messages
+        reasons = {
+            "same_user": f"{emoji} Non puoi contare due volte di fila!",
+            "invalid": f"{emoji} Il messaggio deve essere un numero valido!",
+            "wrong_number": f"{emoji} Numero sbagliato! La sequenza è stata resettata."
+        }
+
+        msg = reasons.get(reason, f"{emoji} Errore nel counting.")
+
+        try:
+            await message.channel.send(msg, delete_after=4)
+        except:
+            pass
+    bot.get_cog("Counting")._delete_and_error = _delete_and_error.__get__(bot.get_cog("Counting"), Counting)_channel_conf(guild_id, str(message.channel.id), chan_conf)
