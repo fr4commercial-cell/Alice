@@ -133,8 +133,8 @@ class Counting(commands.Cog):
 
     # --- MAIN SET COMMAND ---
     @counting_group.command(name="set")
-    @app_commands.describe(channel="Canale", start="Valore iniziale", allow_recovery="Recovery mode")
-    async def counting_set(self, interaction, channel: discord.TextChannel, start: int = 0, allow_recovery: bool = True):
+    @app_commands.describe(channel="Canale", start="Valore iniziale", allow_recovery="Recovery mode", allow_chat="Permetti messaggi non numerici nel canale (default: on)")
+    async def counting_set(self, interaction, channel: discord.TextChannel, start: int = 0, allow_recovery: bool = True, allow_chat: bool = True):
         if not (interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_guild):
             return await interaction.response.send_message("❌ Permessi insufficienti.", ephemeral=True)
 
@@ -145,6 +145,7 @@ class Counting(commands.Cog):
             "last": start,
             "last_user": None,
             "recovery": allow_recovery,
+            "allow_chat": allow_chat,
             "milestones": self.config.get("milestones", DEFAULT_CONFIG["milestones"])
         }
 
@@ -179,6 +180,7 @@ class Counting(commands.Cog):
         e = discord.Embed(title="📊 Counting Info")
         e.add_field(name="Ultimo", value=conf["last"])
         e.add_field(name="Recovery", value=conf["recovery"])
+        e.add_field(name="Chat", value=conf.get("allow_chat", True))
         await interaction.response.send_message(embed=e)
 
     # MAIN COUNTING HANDLER
@@ -204,6 +206,10 @@ class Counting(commands.Cog):
             try:
                 num = int(eval(raw, {"__builtins__": None}, {}))
             except:
+                # Se il canale permette chat, ignora i messaggi non numerici
+                if chan_conf.get("allow_chat", True):
+                    return
+                # Altrimenti, considera errore come prima
                 await self._delete_and_error(message, chan_conf, guild_id, "invalid")
                 return
 
