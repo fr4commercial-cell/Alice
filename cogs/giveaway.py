@@ -7,7 +7,14 @@ import random
 from typing import Optional, List, Tuple
 from datetime import datetime, timedelta, timezone
 from bot_utils import OWNER_ID, owner_or_has_permissions, is_owner
-from console_logger import logger
+try:
+    from console_logger import logger
+except ImportError:
+    try:
+        from cogs.console_logger import logger
+    except ImportError:
+        import logging
+        logger = logging.getLogger("giveaway_fallback")
 
 DATA_DIR = os.path.join('cogs', 'giveaway', 'data')
 BLACKLIST_PATH = os.path.join('cogs', 'giveaway', 'blacklist.json')
