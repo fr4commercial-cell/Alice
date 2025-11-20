@@ -257,4 +257,3 @@ async def setup(bot):
             await message.channel.send(msg, delete_after=4)
         except:
             pass
-    bot.get_cog("Counting")._delete_and_error = _delete_and_error.__get__(bot.get_cog("Counting"), Counting)_channel_conf(guild_id, str(message.channel.id), chan_conf)
