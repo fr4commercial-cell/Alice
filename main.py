@@ -23,7 +23,14 @@ class MyBot(commands.Bot):
             'cogs.boost',
             'cogs.tickets',
             'cogs.counting',
-            'cogs.autorole'
+            'cogs.autorole',
+            'cogs.levels',
+            'cogs.moderation',
+            'cogs.giveaways',
+            'cogs.logs',
+            'cogs.helps',
+            'cogs.console_logger',
+            'cogs.embed_creator',
         ]
 
         for ext in initial_extensions:
@@ -43,6 +50,17 @@ class MyBot(commands.Bot):
     async def on_ready(self):
         print(f"🤖 Logged in as {self.user} ({self.user.id})")
         print("Bot pronto!")
+        # Fast guild sync to make slash commands appear immediately in joined guilds
+        try:
+            for g in self.guilds:
+                try:
+                    self.tree.copy_global_to(guild=g)
+                    await self.tree.sync(guild=g)
+                    print(f"⚡ Comandi sincronizzati velocemente per la guild: {g.name} ({g.id})")
+                except Exception as e:
+                    print(f"⚠️ Guild sync fallita per {g.id}: {e}")
+        except Exception as e:
+            print(f"⚠️ Fast guild sync errore: {e}")
 
 
 bot = MyBot(command_prefix='!', intents=intents)
