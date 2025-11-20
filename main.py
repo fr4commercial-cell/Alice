@@ -47,6 +47,15 @@ class MyBot(commands.Bot):
             except Exception as e:
                 print(f"❌ Errore nel caricare {ext}: {e}")
 
+        # Riepilogo cogs caricati
+        try:
+            loaded = [e for e in initial_extensions if e in self.extensions]
+            print(f"📦 Totale cogs caricati: {len(loaded)}")
+            if loaded:
+                print("➡️  " + ", ".join(loaded))
+        except Exception as e:
+            print(f"⚠️ Impossibile mostrare riepilogo cogs: {e}")
+
         # SYNC GLOBALE DEI COMANDI
         try:
             synced = await self.tree.sync()
