@@ -41,17 +41,17 @@ DEFAULT_CONFIG = {
     "milestones": [100, 500, 1000, 5000, 10000],
     "log_channel_id": None,
     "timeout_minutes": 1,
-    "success_emoji": None,
-    "error_emoji": None,
-    "milestone_emoji": None,
+    "success_emoji": "<a:Corretto:1441169877552599253>",
+    "error_emoji": "<a:Sbagliato:1441165123568930896>",
+    "milestone_emoji": "<a:Fuoco:1381953999829336206>",
     "special_numbers": {
-        "67": None,
-        "100": None,
-        "500": None,
-        "666": None,
-        "999": None,
-        "1000": None,
-        "10000": None
+        "67": "<a:67:1441169460345176197>",
+        "100": "<a:100:1441169427533009118>",
+        "500": "<:500:1441169389792526428>",
+        "666": "<:666:1441169193792700510>",
+        "999": "<:999:1441169161526050866>",
+        "1000": "<:1000:1441169358507217006>",
+        "10000": "<:10000:1441169310012801035>"
     }
 }
 
@@ -195,7 +195,7 @@ class Counting(commands.Cog):
 
         # WRONG NUMBER
         if num != expected:
-            await self._delete_and_error(message, chan_conf, guild_id, "<a:Sbagliato:1441165123568930896>")
+            await self._delete_and_error(message, chan_conf, guild_id, "wrong_number")
             return
 
         # CORRECT
@@ -204,12 +204,12 @@ class Counting(commands.Cog):
         self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
         self.inc_leaderboard(guild_id, str(message.author.id))
 
-        emoji = self._get_emoji(message.guild, "<a:Corretto:1441169877552599253>") or "✅"
+        emoji = self._get_emoji(message.guild, "success_emoji") or "✅"
         try: await message.add_reaction(emoji)
         except: pass
 
         if num in chan_conf.get("milestones", []):
-            m_emoji = self._get_emoji(message.guild, "<a:Fuoco:1381953999829336206>") or "🎉"
+            m_emoji = self._get_emoji(message.guild, "milestone_emoji") or "🎉"
             try: await message.channel.send(f"{m_emoji} Milestone **{num}** raggiunta da {message.author.mention}!")
             except: pass
 
@@ -236,7 +236,7 @@ class Counting(commands.Cog):
         except:
             pass
 
-        emoji = self._get_emoji(message.guild, "<a:Sbagliato:1441165123568930896>") or "❌"
+        emoji = self._get_emoji(message.guild, "error_emoji") or "❌"
         try:
             await message.channel.send(f"{emoji} Numero errato! Si riparte da **0**.")
         except:
