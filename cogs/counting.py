@@ -80,6 +80,28 @@ class Counting(commands.Cog):
         self.leaderboard[guild_id][user_id] = self.leaderboard[guild_id].get(user_id, 0) + amount
         save_json(LEADERBOARD_FILE, self.leaderboard)
 
+    def _get_emoji(self, guild: discord.Guild, key: str):
+        val = self.config.get(key)
+        if not val:
+            return None
+        # If stored as int ID or numeric string
+        try:
+            if isinstance(val, int) or (isinstance(val, str) and val.isdigit()):
+                e = guild.get_emoji(int(val))
+                return e or None
+        except Exception:
+            pass
+        # If stored as markup like <a:name:id> or <:name:id>
+        if isinstance(val, str) and val.startswith("<") and ":" in val:
+            try:
+                parts = val.split(":")
+                _id = int(parts[-1].rstrip(">"))
+                e = guild.get_emoji(_id)
+                return e or None
+            except Exception:
+                return val  # fallback to raw string
+        return val
+
     # --- CONFIG EMOJI COMMAND ---
     @counting_group.command(name="emoji")
     @app_commands.describe(type="success/error/milestone o numero", emoji="Emoji personalizzata del server")
@@ -127,9 +149,19 @@ class Counting(commands.Cog):
         }
 
         self.set_channel_conf(guild_id, chan_id, conf)
-        await interaction.response.send_message(f"Counting attivato in {channel.mention}", ephemeral=True)
+        msg_text = f"Counting attivato in {channel.mention}"
         try:
-            await channel.send(start + 1)
+            await interaction.response.send_message(msg_text, ephemeral=True)
+        except discord.NotFound:
+            try:
+                await interaction.followup.send(msg_text, ephemeral=True)
+            except Exception:
+                pass
+        except discord.HTTPException:
+            # Already responded or other transient issue; ignore
+            pass
+        try:
+            await channel.send(str(start + 1))
         except:
             pass
 
@@ -212,48 +244,32 @@ class Counting(commands.Cog):
                 except:
                     pass
 
-    async def _delete_and_error(self, message, chan_conf, guild_id, reason):
+    async def _delete_and_error(self, message: discord.Message, chan_conf: dict, guild_id: str, reason: str):
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
 
-        chan_conf["last"] = 0
-        chan_conf["last_user"] = None
-        self.set
-
-
-# --- REQUIRED SETUP FUNCTION ---
-def setup(bot: commands.Bot):
-    bot.add_cog(Counting(bot))
-
-# Added async setup function
-async def setup(bot):
-    await bot.add_cog(Counting(bot))
-    async def _delete_and_error(self, message, chan_conf, guild_id, reason):
-        try:
-            await message.delete()
-        except:
-            pass
-
-        # Reset counter
+        # Reset counter state
         chan_conf["last"] = 0
         chan_conf["last_user"] = None
         self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
 
-        # Emoji error
+        # Build feedback message
         emoji = self._get_emoji(message.guild, "error_emoji") or "❌"
-
-        # Reason messages
         reasons = {
             "same_user": f"{emoji} Non puoi contare due volte di fila!",
             "invalid": f"{emoji} Il messaggio deve essere un numero valido!",
-            "wrong_number": f"{emoji} Numero sbagliato! La sequenza è stata resettata."
+            "wrong_number": f"{emoji} Numero sbagliato! La sequenza è stata resettata.",
         }
-
         msg = reasons.get(reason, f"{emoji} Errore nel counting.")
 
         try:
             await message.channel.send(msg, delete_after=4)
-        except:
+        except Exception:
             pass
+
+
+# --- EXTENSION SETUP ---
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Counting(bot))
