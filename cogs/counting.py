@@ -275,6 +275,19 @@ class Counting(commands.Cog):
         except Exception:
             pass
 
+        # Apply timeout to offender (requires Moderate Members permission)
+        try:
+            minutes = int(self.config.get("timeout_minutes", 1))
+        except Exception:
+            minutes = 1
+        try:
+            member: discord.Member = message.author  # in guild context, author is a Member
+            until = discord.utils.utcnow() + timedelta(minutes=minutes)
+            await member.timeout(until=until, reason=f"Counting violation: {reason}")
+        except Exception:
+            # Ignore if lacking permissions or API failure
+            pass
+
 
 # --- EXTENSION SETUP ---
 async def setup(bot: commands.Bot):
