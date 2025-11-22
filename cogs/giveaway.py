@@ -695,7 +695,10 @@ aSYNC_SETUP_ERR = 'Errore durante il setup del cog Giveaway: {}'
 
 async def setup(bot):
     try:
-        await bot.add_cog(GiveawayCog(bot))
+        cog = GiveawayCog(bot)
+        await bot.add_cog(cog)
+        if bot.tree.get_command('giveaway') is None:
+            bot.tree.add_command(cog.gw)
     except Exception as e:
         print(aSYNC_SETUP_ERR.format(e))
         raise e
