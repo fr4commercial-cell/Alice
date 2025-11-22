@@ -23,27 +23,7 @@ class CoralMCCog(commands.Cog):
         self.cache_info: Dict[str, Tuple[float, PlayerInfo]] = {}
         self._rate_limit: Dict[int, float] = {}  # user_id -> last used timestamp
         self.rate_window = 3  # seconds between uses
-        # WinStreak leaderboard cache
-        self.winstreak_cache: List[Dict[str, Any]] = []
-        self.winstreak_last: float = 0.0
-        self.winstreak_ttl: int = 5  # aggiornamento "quasi" realtime
-        self._winstreak_task: Optional[asyncio.Task] = self.bot.loop.create_task(self._winstreak_loop())
-
-    async def _winstreak_loop(self):
-        await self.bot.wait_until_ready()
-        while not self.bot.is_closed():
-            try:
-                data = await self.client.get_bedwars_winstreak_top(limit=100)
-                if data:
-                    self.winstreak_cache = data
-                    self.winstreak_last = time.time()
-            except Exception as e:
-                logger.warning(f'Errore aggiornando WinStreak leaderboard: {e}')
-            await asyncio.sleep(self.winstreak_ttl)
-
-    def cog_unload(self):
-        if self._winstreak_task:
-            self._winstreak_task.cancel()
+        # Rimosso supporto WinStreak leaderboard
 
     async def cog_unload(self):
         try:
@@ -328,26 +308,6 @@ class CoralMCCog(commands.Cog):
             logger.error(f'Errore combined coralmc: {e}')
             await interaction.followup.send('❌ Errore recuperando dati.', ephemeral=not public)
 
-    @coralmc_group.command(name='winstreak', description='Top 100 BedWars WinStreak (aggiornamento quasi realtime)')
-    @app_commands.describe(public='Se true risposta visibile a tutti')
-    async def winstreak_cmd(self, interaction: discord.Interaction, public: bool = False):
-        await interaction.response.defer(ephemeral=not public, thinking=True)
-        # Usa cache aggiornata dal loop. Se vuota prova fetch immediato.
-        if not self.winstreak_cache:
-            data = await self.client.get_bedwars_winstreak_top(limit=100)
-            if data:
-                self.winstreak_cache = data
-                self.winstreak_last = time.time()
-        if not self.winstreak_cache:
-            await interaction.followup.send('❌ Impossibile recuperare la leaderboard (API?).', ephemeral=not public)
-            return
-        lines = []
-        for idx, p in enumerate(self.winstreak_cache, start=1):
-            lines.append(f"`{idx:02d}.` **{p['username']}** • WS {p['winstreak']} (High {p['highest_winstreak']})")
-        embed = discord.Embed(title='🏆 Top 100 BedWars WinStreak', description='\n'.join(lines), color=0xE67E22)
-        age = int(time.time() - self.winstreak_last)
-        embed.set_footer(text=f'Aggiornato {age}s fa • Refresh ogni {self.winstreak_ttl}s')
-        await interaction.followup.send(embed=embed, ephemeral=not public)
 
 async def setup(bot: commands.Bot):
     cog = CoralMCCog(bot)
