@@ -25,6 +25,16 @@ class CoralMCCog(commands.Cog):
         self.rate_window = 3  # seconds between uses
         # Rimosso supporto WinStreak leaderboard
 
+    async def _safe_defer(self, interaction: discord.Interaction, ephemeral: bool):
+        """Tenta il defer senza sollevare 404 Unknown interaction se già risposto."""
+        if interaction.response.is_done():
+            return
+        try:
+            await interaction.response.defer(ephemeral=ephemeral, thinking=True)
+        except (discord.NotFound, discord.HTTPException):
+            # Ignora token scaduto o già usato
+            pass
+
     async def cog_unload(self):
         try:
             await self.client.close()
@@ -99,7 +109,7 @@ class CoralMCCog(commands.Cog):
         if not self._check_rate(interaction):
             await interaction.response.send_message('⏳ Riprova tra qualche secondo.', ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=not public, thinking=True)
+        await self._safe_defer(interaction, ephemeral=not public)
         if not self.client.is_username_valid(username):
             await interaction.followup.send('❌ Username non valido.', ephemeral=not public)
             return
@@ -130,7 +140,7 @@ class CoralMCCog(commands.Cog):
         if not self._check_rate(interaction):
             await interaction.response.send_message('⏳ Riprova tra qualche secondo.', ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=not public, thinking=True)
+        await self._safe_defer(interaction, ephemeral=not public)
         if not self.client.is_username_valid(username):
             await interaction.followup.send('❌ Username non valido.', ephemeral=not public)
             return
@@ -239,7 +249,7 @@ class CoralMCCog(commands.Cog):
         if not self._check_rate(interaction):
             await interaction.response.send_message('⏳ Riprova tra qualche secondo.', ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=not public, thinking=True)
+        await self._safe_defer(interaction, ephemeral=not public)
         if not self.client.is_username_valid(username):
             await interaction.followup.send('❌ Username non valido.', ephemeral=not public)
             return
