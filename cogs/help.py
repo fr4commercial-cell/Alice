@@ -174,7 +174,6 @@ categories = {
                 '- `/coralmc stats` <username> [public] - Statistiche BedWars',
                 '- `/coralmc info` <username> [public] - Rank BedWars',
                 '- `/coralmc combined` <username> [public] - Rank + Stats BedWars',
-                '- `/coralmc winstreak` [public] - Top 100 WinStreak BedWars',
                 '- `/coralmc ping` - Ping API CoralMC',
                 '- `/coralmc clearcache` - Svuota cache CoralMC',
                 '- `/coralmc purge` <username> - Pulisce cache singolo utente',
