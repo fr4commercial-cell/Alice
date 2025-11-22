@@ -59,9 +59,9 @@ categories = {
             'commands': [
                 '\\- `/login` <username> - Collega il tuo Minecraft e aggiunge stelle BedWars al nickname',
                 '\\- `/login_update` - Aggiorna il livello/stelle nel nickname',
-                '\- `/login_unlink` - Rimuove il collegamento e ripristina nickname',
-                '\- `/login_suffix` [nuovo] - Mostra o imposta il simbolo prima del livello (admin)',
-                '\- `/login_list` [page] - Mostra elenco utenti collegati /login'
+                '\\- `/login_unlink` - Rimuove il collegamento e ripristina nickname',
+                '\\- `/login_suffix` [nuovo] - Mostra o imposta il simbolo prima del livello (admin)',
+                '\\- `/login_list` [page] - Mostra elenco utenti collegati /login'
             ]
         },
     'autorole': {
