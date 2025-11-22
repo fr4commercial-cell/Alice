@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import json
 import os
 import asyncio
@@ -17,6 +18,7 @@ class LogCog(commands.Cog):
         self.log_config = {}
         with open('./config.json', 'r', encoding='utf-8') as f:
             self.config = json.load(f)
+        self.log_config = {}
         if os.path.exists(LOG_JSON):
             try:
                 with open(LOG_JSON, 'r', encoding='utf-8') as f:
@@ -46,6 +48,51 @@ class LogCog(commands.Cog):
         except Exception as e:
             logger.error(f'Errore nel caricamento di log.json: {e}')
             self.log_config = {}
+
+    def _save_log_config(self):
+        try:
+            with open(LOG_JSON, 'w', encoding='utf-8') as f:
+                json.dump(self.log_config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f'Errore salvataggio log_config: {e}')
+
+    # Gruppo comandi slash per configurare i canali di log
+    logs_group = app_commands.Group(name='logs', description='Gestione canali di log')
+
+    async def cog_load(self):
+        # Registra il gruppo quando il cog viene caricato
+        try:
+            self.bot.tree.add_command(self.logs_group)
+        except Exception as e:
+            logger.error(f'Errore aggiungendo logs_group: {e}')
+
+    @logs_group.command(name='set', description='Imposta il canale per un tipo di log')
+    @app_commands.describe(tipo='Tipo log (server/join/leave/message/warns/kicks/bans)', channel='Canale da associare')
+    @app_commands.choices(tipo=[
+        app_commands.Choice(name='server', value='server_log_channel_id'),
+        app_commands.Choice(name='join', value='join_log_channel_id'),
+        app_commands.Choice(name='leave', value='leave_log_channel_id'),
+        app_commands.Choice(name='message', value='message_log_channel_id'),
+        app_commands.Choice(name='warns', value='warns_log_channel_id'),
+        app_commands.Choice(name='kicks', value='kicks_log_channel_id'),
+        app_commands.Choice(name='bans', value='bans_log_channel_id'),
+    ])
+    async def logs_set(self, interaction: discord.Interaction, tipo: app_commands.Choice[str], channel: discord.TextChannel):
+        self.reload_config()
+        key = tipo.value
+        self.log_config[key] = channel.id
+        self._save_log_config()
+        await interaction.response.send_message(f'✅ Set {tipo.name} log → {channel.mention}', ephemeral=True)
+
+    @logs_group.command(name='config', description='Mostra la configurazione dei canali di log')
+    async def logs_config(self, interaction: discord.Interaction):
+        self.reload_config()
+        keys = ['server_log_channel_id','join_log_channel_id','leave_log_channel_id','message_log_channel_id','warns_log_channel_id','kicks_log_channel_id','bans_log_channel_id','moderation_log_channel_id']
+        lines = []
+        for k in keys:
+            v = self.log_config.get(k)
+            lines.append(f'{k}: {f"<#{v}>" if v else "N/D"}')
+        await interaction.response.send_message('\n'.join(lines), ephemeral=True)
 
     def _format_datetime(self, dt: datetime):
         if not dt:
@@ -154,8 +201,9 @@ class LogCog(commands.Cog):
 
     def _get_channel_type_name(self, channel):
         if isinstance(channel, discord.TextChannel):
-            return 'Testo'
-        elif isinstance(channel, discord.VoiceChannel):
+                        target_channel = self.log_config.get('bans_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                        await self._send_log_embed(
+                            target_channel,
             return 'Voce'
         elif isinstance(channel, discord.CategoryChannel):
             return 'Categoria'
@@ -176,8 +224,9 @@ class LogCog(commands.Cog):
             title = self._render_template(cfg.get('title', ''), **kwargs)
             description = self._render_template(cfg.get('description', ''), **kwargs)
 
-            embed = discord.Embed(title=title or None, description=description or None, color=cfg.get('color', 0x00ff00))
-            embed.timestamp = datetime.now(timezone.utc)
+                        target_channel = self.log_config.get('bans_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                        await self._send_log_embed(
+                            target_channel,
             if cfg.get('thumbnail'):
                 thumb = self._render_template(cfg.get('thumbnail'), **kwargs)
                 embed.set_thumbnail(url=thumb)
@@ -192,8 +241,9 @@ class LogCog(commands.Cog):
             elif guild and guild.icon:
                 embed.set_author(name=guild.name, icon_url=guild.icon.url)
             if cfg.get('footer'):
-                footer = self._render_template(cfg.get('footer'), **kwargs)
-                embed.set_footer(text=footer)
+                    target_channel = self.log_config.get('warns_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                    await self._send_log_embed(
+                        target_channel,
 
             await channel.send(embed=embed)
         except Exception as e:
@@ -207,8 +257,9 @@ class LogCog(commands.Cog):
             if not channel_id:
                 return
             channel = member.guild.get_channel(int(channel_id))
-            if not channel:
-                return
+                    target_channel = self.log_config.get('warns_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                    await self._send_log_embed(
+                        target_channel,
 
             joined_at = self._format_datetime(member.joined_at)
             created_at = self._format_datetime(member.created_at)
@@ -221,8 +272,9 @@ class LogCog(commands.Cog):
             if cfg.get('thumbnail'):
                 thumb = cfg.get('thumbnail')
                 thumb = thumb.replace('{avatar}', member.display_avatar.url)
-                embed.set_thumbnail(url=thumb)
-            if cfg.get('author_header'):
+                    target_channel = self.log_config.get('warns_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                    await self._send_log_embed(
+                        target_channel,
                 try:
                     embed.set_author(name=member.name, icon_url=member.display_avatar.url)
                 except Exception:
@@ -241,8 +293,9 @@ class LogCog(commands.Cog):
     async def on_member_remove(self, member: discord.Member):
         try:
             cfg = self.log_config.get('leave_message', {})
-            channel_id = self.log_config.get('leave_log_channel_id') or self.config.get('leave_log_channel_id')
-            if not channel_id:
+                            target_channel = self.log_config.get('server_log_channel_id') or self.log_config.get('moderation_log_channel_id')
+                            await self._send_log_embed(
+                                target_channel,
                 return
             channel = member.guild.get_channel(int(channel_id))
             if not channel:
@@ -265,12 +318,34 @@ class LogCog(commands.Cog):
             except Exception:
                 time_in_server = 'Unknown'
 
-            title = cfg.get('title', '').replace('{mention}', mention).replace('{username}', member.name)
+                        # Rileva eventuale kick (audit log)
+                        is_kick = False
+                        try:
+                            async for entry in member.guild.audit_logs(action=discord.AuditLogAction.kick, limit=3):
+                                if entry.target.id == member.id:
+                                    # Considera recente (entro 15s)
+                                    if entry.created_at and (datetime.now(timezone.utc) - entry.created_at.replace(tzinfo=timezone.utc)) < timedelta(seconds=15):
+                                        is_kick = True
+                                        break
+                        except Exception:
+                            pass
+                        if is_kick:
+                            kick_channel_id = self.log_config.get('kicks_log_channel_id') or channel_id
+                            kick_channel = member.guild.get_channel(int(kick_channel_id)) if kick_channel_id else channel
+                            try:
+                                await kick_channel.send(embed=embed)
+                            except Exception:
+                                pass
+                        else:
+                            await channel.send(embed=embed)
             description = self._render_template(cfg.get('description', ''), mention=mention, left_at=left_at, created_at=created_at, roles=roles, username=member.name, id=member.id, time_in_server=time_in_server)
 
             embed = discord.Embed(title=title or None, description=description or None, color=cfg.get('color', 0xff0000))
             if cfg.get('thumbnail'):
                 thumb = cfg.get('thumbnail')
+
+                # Il group dei comandi di configurazione sarà aggiunto dal cog_load
+
                 thumb = thumb.replace('{avatar}', member.display_avatar.url)
                 embed.set_thumbnail(url=thumb)
             if cfg.get('author_header'):
