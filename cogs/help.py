@@ -53,6 +53,15 @@ categories = {
 			'\\- `/verify forceverify` <membro> - Verifica forzata per un membro'
         ]
     },
+        'account': {
+            'emoji': '⭐',
+            'name': 'Account Minecraft',
+            'commands': [
+                '\\- `/login` <username> - Collega il tuo Minecraft e aggiunge stelle BedWars al nickname',
+                '\\- `/login_update` - Aggiorna il livello/stelle nel nickname',
+                '\\- `/login_unlink` - Rimuove il collegamento e ripristina nickname'
+            ]
+        },
     'autorole': {
         'emoji': '🎭',
         'name': 'AutoRole',
@@ -157,12 +166,19 @@ categories = {
         ]
     },
     'coralmc': {
-        'emoji': '<:VL_CoralMC:1434320425592033391>',
-        'name': 'CoralMC',
-        'commands': [
-            '`Coming Soon...` 👀',
-        ]
-    },
+            'emoji': '<:VL_CoralMC:1434320425592033391>',
+            'name': 'CoralMC',
+            'commands': [
+                '- `/coralmc stats` <username> [public] - Statistiche BedWars',
+                '- `/coralmc info` <username> [public] - Rank BedWars',
+                '- `/coralmc combined` <username> [public] - Rank + Stats BedWars',
+                '- `/coralmc winstreak` [public] - Top 100 WinStreak BedWars',
+                '- `/coralmc ping` - Ping API CoralMC',
+                '- `/coralmc clearcache` - Svuota cache CoralMC',
+                '- `/coralmc purge` <username> - Pulisce cache singolo utente',
+                '- `/coralmc setttl` <secondi> - Imposta TTL cache'
+            ]
+        },
     'stats': {
         'emoji': '📜',
         'name': 'Stats',
@@ -248,7 +264,7 @@ class HelpSelectView(discord.ui.View):
                 inline=False
             )
 
-        embed.set_footer(text='Valiance Bot | "<campo>" indica un campo obbligatorio; "[campo]" indica un campo opzionale.')
+        embed.set_footer(text='Alicers Bot | "<campo>" indica un campo obbligatorio; "[campo]" indica un campo opzionale.')
 
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -260,15 +276,29 @@ class HelpCog(commands.Cog):
     async def slash_help(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title='📋 Comandi Disponibili',
-            description='**Help** | **Valiance**\n\nBenvenuto nel pannello comandi di **Valiance**.\nQuesto bot è stato progettato per offrire strumenti intuitivi, affidabili e sempre aggiornati per la tua community Discord.\n\nUtilizza il menu sottostante per navigare tra le varie categorie e scoprire tutti i comandi disponibili.\nOgni sezione contiene descrizioni dettagliate e parametri d’uso per aiutarti a sfruttare al meglio ogni funzione.\n\n⚙️ | Developer: `indifferenzah`\n<:VL_Discord:1437134976217911407> | Discord: https://discord.gg/GVMGZuGZ8F\n🔗 | Sito: https://valiancev2.vercel.app/\n-# 💡 | Per suggerimenti o supporto apri un ticket.',
+            description='**Help** | **Alicers**\n\nBenvenuto nel pannello comandi di **Alicers**.\nQuesto bot è stato progettato per offrire strumenti intuitivi, affidabili e sempre aggiornati per la tua community Discord.\n\nUtilizza il menu sottostante per navigare tra le varie categorie e scoprire tutti i comandi disponibili.\nOgni sezione contiene descrizioni dettagliate e parametri d’uso per aiutarti a sfruttare al meglio ogni funzione.\n\n⚙️ | Developer: `indifferenzah`\n<:VL_Discord:1437134976217911407> | Discord: https://discord.gg/GVMGZuGZ8F\n🔗 | Sito: https://alicers.example/ (placeholder)\n-# 💡 | Per suggerimenti o supporto apri un ticket.',
             color=0x00ff00
         )
 
-        embed.set_footer(text='Valiance Bot | "<campo>" indica un campo obbligatorio; "[campo]" indica un campo opzionale.')
+        embed.set_footer(text='Alicers Bot | "<campo>" indica un campo obbligatorio; "[campo]" indica un campo opzionale.')
 
         view = HelpSelectView(interaction.user.id, self.bot)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         logger.info(f'Comando /help usato da {interaction.user.name}#{interaction.user.discriminator} ({interaction.user.id}) in {interaction.guild.name}')
 
 async def setup(bot):
+    # Rimuove comando esistente se già registrato per evitare duplicati su reload
+    try:
+        existing = bot.tree.get_command('help')
+        if existing:
+            bot.tree.remove_command('help')
+    except Exception:
+        pass
     await bot.add_cog(HelpCog(bot))
+    # Reinserisce se non presente
+    try:
+        if bot.tree.get_command('help') is None:
+            # Decorator dovrebbe averlo aggiunto, fallback se mancato
+            bot.tree.add_command(HelpCog(bot).slash_help)
+    except Exception:
+        pass
