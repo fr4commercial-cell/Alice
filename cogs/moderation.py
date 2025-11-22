@@ -89,6 +89,7 @@ CONFIG_PATH = os.path.join(PROJECT_ROOT, 'config.json')
 MOD_JSON = os.path.join(BASE_DIR, 'moderation.json')
 WARNS_JSON = os.path.join(BASE_DIR, 'warns.json')
 USER_WORDS_JSON = os.path.join(BASE_DIR, 'user_words.json')
+MOD_LOG_CHANNEL_ID = 1207365506630291457  # Canale log moderazione fisso richiesto
 
 class ModerationCog(commands.Cog):
     def __init__(self, bot):
@@ -137,6 +138,49 @@ class ModerationCog(commands.Cog):
                     json.dump(self.user_words, f, indent=2, ensure_ascii=False)
             except Exception:
                 pass
+
+        self.mod_log_channel_id = MOD_LOG_CHANNEL_ID
+
+    def _get_mod_log_channel(self, guild: discord.Guild):
+        if not guild:
+            return None
+        channel = guild.get_channel(self.mod_log_channel_id)
+        return channel if isinstance(channel, discord.TextChannel) else None
+
+    async def _send_mod_log(self, guild: discord.Guild, action: str, target: discord.Member | discord.User | None, moderator: discord.Member | discord.User | None, **extra):
+        try:
+            channel = self._get_mod_log_channel(guild)
+            if not channel:
+                return
+            color_map = {
+                'ban': 0xE74C3C,
+                'kick': 0xE67E22,
+                'mute': 0xF1C40F,
+                'unmute': 0x2ECC71,
+                'warn': 0xFFA500,
+                'unwarn': 0x3498DB,
+                'clearwarns': 0x95A5A6,
+                'unban': 0x2ECC71,
+                'nick': 0x9B59B6
+            }
+            embed = discord.Embed(title=f'Azione Moderazione: {action}', color=color_map.get(action, 0x2F3136))
+            if target:
+                embed.add_field(name='Target', value=f'{getattr(target, "mention", str(target))}\nID: `{getattr(target, "id", "N/A")}`', inline=True)
+            if moderator:
+                embed.add_field(name='Staff', value=f'{getattr(moderator, "mention", str(moderator))}\nID: `{getattr(moderator, "id", "N/A")}`', inline=True)
+            for k, v in extra.items():
+                if v is None:
+                    continue
+                sval = str(v)
+                if not sval.strip():
+                    continue
+                if len(sval) > 1000:
+                    sval = sval[:1000] + '...'
+                embed.add_field(name=k.capitalize(), value=sval, inline=False)
+            embed.timestamp = datetime.datetime.utcnow()
+            await channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f'Errore invio log moderazione ({action}): {e}')
 
     def save_warns(self):
         with open(WARNS_JSON, 'w', encoding='utf-8') as f:
@@ -286,6 +330,7 @@ class ModerationCog(commands.Cog):
             await member.ban(reason=reason)
             await interaction.response.send_message(f'✅ {member.mention} è stato bannato. Motivo: {reason}', ephemeral=True)
             await self.send_dm(member, "ban", reason=reason, staffer=str(interaction.user), time=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), duration="permanente")
+            await self._send_mod_log(interaction.guild, 'ban', member, interaction.user, reason=reason)
         except Exception as e:
             await interaction.response.send_message(f"❌ Errore nel ban: {e}", ephemeral=True)
 
@@ -296,6 +341,7 @@ class ModerationCog(commands.Cog):
             await member.kick(reason=reason)
             await interaction.response.send_message(f'✅ {member.mention} è stato kickato. Motivo: {reason}', ephemeral=True)
             await self.send_dm(member, "kick", reason=reason, staffer=str(interaction.user), time=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), duration="N/A")
+            await self._send_mod_log(interaction.guild, 'kick', member, interaction.user, reason=reason)
         except Exception as e:
             await interaction.response.send_message(f"❌ Errore nel kick: {e}", ephemeral=True)
 
@@ -328,6 +374,7 @@ class ModerationCog(commands.Cog):
             await member.timeout(delta, reason=reason)
             await interaction.response.send_message(f'✅ {member.mention} mutato per {duration}.', ephemeral=True)
             await self.send_dm(member, "mute", reason=reason, staffer=str(interaction.user), time=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), duration=duration)
+            await self._send_mod_log(interaction.guild, 'mute', member, interaction.user, reason=reason, duration=duration)
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nel mute: {e}', ephemeral=True)
 
@@ -339,6 +386,7 @@ class ModerationCog(commands.Cog):
             await member.timeout(None, reason=reason)
             await interaction.response.send_message(f'✅ {member.mention} è stato smutato.', ephemeral=True)
             await self.send_dm(member, "unmute", reason=reason, staffer=str(interaction.user), time=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), duration="0")
+            await self._send_mod_log(interaction.guild, 'unmute', member, interaction.user, reason=reason)
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nell\'unmute: {e}', ephemeral=True)
 
@@ -360,6 +408,7 @@ class ModerationCog(commands.Cog):
             self.save_warns()
             await interaction.response.send_message(f'⚠️ Warn {warn_id} assegnato a {member.mention}: {reason}', ephemeral=False)
             await self.send_dm(member, "warn", reason=reason, staffer=str(interaction.user), time=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), total_warns=len(self.get_user_warns(member.id)))
+            await self._send_mod_log(interaction.guild, 'warn', member, interaction.user, reason=reason, warn_id=warn_id, total_warns=len(self.get_user_warns(member.id)))
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nel warn: {e}', ephemeral=True)
 
@@ -372,6 +421,7 @@ class ModerationCog(commands.Cog):
                 del self.warns_data["warns"][str(warn_id)]
                 self.save_warns()
                 await interaction.response.send_message(f'✅ Warn {warn_id} rimosso.', ephemeral=True)
+                await self._send_mod_log(interaction.guild, 'unwarn', None, interaction.user, warn_id=warn_id)
             else:
                 await interaction.response.send_message('❌ Warn non trovato.', ephemeral=True)
         except Exception as e:
@@ -402,6 +452,7 @@ class ModerationCog(commands.Cog):
                 del self.warns_data["warns"][wid]
             self.save_warns()
             await interaction.response.send_message(f'✅ Rimossi {len(to_delete)} warn per {member.mention}.', ephemeral=True)
+            await self._send_mod_log(interaction.guild, 'clearwarns', member, interaction.user, removed=len(to_delete))
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nel clearwarns: {e}', ephemeral=True)
 
@@ -459,6 +510,7 @@ class ModerationCog(commands.Cog):
             user = await self.bot.fetch_user(uid)
             await interaction.guild.unban(user, reason=reason)
             await interaction.response.send_message(f'✅ Utente {user} sbannato.', ephemeral=True)
+            await self._send_mod_log(interaction.guild, 'unban', user, interaction.user, reason=reason)
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nell\'unban: {e}', ephemeral=True)
 
@@ -481,6 +533,7 @@ class ModerationCog(commands.Cog):
         try:
             await member.edit(nick=nickname)
             await interaction.response.send_message(f'✅ Nickname di {member.mention} impostato a "{nickname}".', ephemeral=True)
+            await self._send_mod_log(interaction.guild, 'nick', member, interaction.user, new_nick=nickname)
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nella modifica nickname: {e}', ephemeral=True)
 
