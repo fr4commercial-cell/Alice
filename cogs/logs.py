@@ -237,6 +237,45 @@ class LogCog(commands.Cog):
             if cfg.get('footer'):
                 footer = self._render_template(cfg.get('footer'), **kwargs)
                 embed.set_footer(text=footer)
+            # Aggiunta campi dinamici se non già inclusi in title/description
+            used_text = f"{title}\n{description}".lower()
+            field_whitelist = {
+                'content': 'Contenuto',
+                'old_content': 'Vecchio Contenuto',
+                'new_content': 'Nuovo Contenuto',
+                'changes': 'Modifiche',
+                'reason': 'Motivo',
+                'duration': 'Durata',
+                'added_roles': 'Ruoli Aggiunti',
+                'removed_roles': 'Ruoli Rimossi',
+                'added_perms': 'Permessi Aggiunti',
+                'removed_perms': 'Permessi Rimossi',
+                'emojis': 'Emoji',
+                'stickers': 'Sticker',
+                'role': 'Ruolo',
+                'channel': 'Canale',
+                'old_channel': 'Canale Precedente',
+                'new_channel': 'Nuovo Canale',
+                'staffer': 'Staff',
+                'duration': 'Durata',
+                'word': 'Parola'
+            }
+            for key, label in field_whitelist.items():
+                if key in kwargs and isinstance(kwargs[key], str):
+                    val = kwargs[key].strip()
+                    if not val:
+                        continue
+                    # Evita duplicare se già presente nella descrizione
+                    if val.lower() in used_text:
+                        continue
+                    # Tronca se troppo lungo
+                    if len(val) > 1024:
+                        val = val[:1000] + '...'
+                    try:
+                        embed.add_field(name=label, value=val, inline=False)
+                    except Exception:
+                        pass
+            embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=embed)
         except Exception as e:
             logger.error(f'Errore invio embed log: {e}')
