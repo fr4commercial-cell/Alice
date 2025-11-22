@@ -53,6 +53,17 @@ class LoginCog(commands.Cog):
         self.links.setdefault('__settings__', {})['suffix'] = new_suffix[:4]
         _save_links(self.links)
 
+    async def _safe_defer(self, interaction: discord.Interaction, ephemeral: bool = True):
+        """Tenta il defer dell'interazione in modo sicuro evitando eccezioni 404 Unknown interaction.
+        Se la risposta è già stata inviata (is_done) o l'interazione è invalida, ignora silenziosamente."""
+        if interaction.response.is_done():
+            return
+        try:
+            await interaction.response.defer(ephemeral=ephemeral, thinking=True)
+        except (discord.NotFound, discord.HTTPException):
+            # Token già consumato o scaduto: si prosegue usando followup
+            pass
+
     async def _fetch_level(self, username: str) -> Optional[int]:
         stats = await self.client.get_player_stats(username)
         if not stats:
@@ -111,7 +122,7 @@ class LoginCog(commands.Cog):
     @app_commands.command(name='login', description='Collega il tuo username Minecraft e mostra le stelle BedWars nel nickname')
     @app_commands.describe(username='Il tuo username Minecraft')
     async def login_cmd(self, interaction: discord.Interaction, username: str):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._safe_defer(interaction, ephemeral=True)
         member = interaction.user
         if not self.client.is_username_valid(username):
             await interaction.followup.send('❌ Username non valido.', ephemeral=True)
@@ -136,7 +147,7 @@ class LoginCog(commands.Cog):
 
     @app_commands.command(name='login_update', description='Aggiorna il tuo nickname con il nuovo livello BedWars')
     async def login_update_cmd(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._safe_defer(interaction, ephemeral=True)
         uid = str(interaction.user.id)
         data = self.links.get(uid)
         if not data:
@@ -158,7 +169,7 @@ class LoginCog(commands.Cog):
 
     @app_commands.command(name='login_unlink', description='Rimuove il collegamento Minecraft e ripristina il nickname')
     async def login_unlink_cmd(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._safe_defer(interaction, ephemeral=True)
         uid = str(interaction.user.id)
         data = self.links.pop(uid, None)
         if not data:
@@ -178,7 +189,7 @@ class LoginCog(commands.Cog):
     @app_commands.command(name='login_suffix', description='Mostra o imposta il suffisso prima del livello BedWars')
     @app_commands.describe(nuovo='Nuovo simbolo (max 4 caratteri). Lascia vuoto per visualizzare quello attuale.')
     async def login_suffix_cmd(self, interaction: discord.Interaction, nuovo: Optional[str] = None):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._safe_defer(interaction, ephemeral=True)
         if nuovo is None:
             await interaction.followup.send(f'Suffisso corrente: `{self._get_suffix()}`', ephemeral=True)
             return
@@ -200,7 +211,7 @@ class LoginCog(commands.Cog):
     @app_commands.command(name='login_list', description='Elenco degli utenti collegati /login')
     @app_commands.describe(page='Pagina (default 1)')
     async def login_list_cmd(self, interaction: discord.Interaction, page: int = 1):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._safe_defer(interaction, ephemeral=True)
         if page < 1:
             page = 1
         entries = []
