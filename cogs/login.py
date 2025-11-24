@@ -74,22 +74,34 @@ class LoginCog(commands.Cog):
             return None
 
     async def _apply_nick(self, member: discord.Member, level: int):
+        """Applica il nickname con suffisso livello.
+        Ritorna (nuovo_nick, errore) dove errore è stringa descrittiva oppure None se ok."""
         base_suffix_symbol = self._get_suffix()
         suffix = f'{base_suffix_symbol}{level}'
         base = member.display_name
-        # Rimuove eventuale suffisso precedente formato SYMBOL + digits
         sanitized = re.sub(r'\s*[^\s\d]\d+$', '', base).strip()
         candidate = f'{sanitized} {suffix}'
         if len(candidate) > 32:
-            # Taglia la parte base mantenendo suffisso
             max_base_len = 32 - (len(suffix) + 1)
             sanitized = sanitized[:max_base_len].rstrip()
             candidate = f'{sanitized} {suffix}'
+        guild = member.guild
+        bot_member = guild.me
+        if bot_member is None:
+            return None, 'Bot non presente (guild.me è None)'
+        if not bot_member.guild_permissions.manage_nicknames:
+            return None, 'Permesso Gestire Nickname mancante'
+        if bot_member.top_role.position <= member.top_role.position:
+            if member == guild.owner:
+                return None, 'Gerarchia: ruolo bot sotto il proprietario'
+            return None, 'Gerarchia: ruolo bot sotto quello dell’utente'
         try:
             await member.edit(nick=candidate, reason='Collegamento CoralMC /login append')
-            return candidate
-        except (discord.Forbidden, discord.HTTPException):
-            return None
+            return candidate, None
+        except discord.Forbidden:
+            return None, 'Forbidden: permessi/gerarchia'
+        except discord.HTTPException as e:
+            return None, f'HTTPException: {e}'
 
     @tasks.loop(hours=6)
     async def auto_update_levels(self):
@@ -139,9 +151,9 @@ class LoginCog(commands.Cog):
             'last_check_ts': time.time()
         }
         _save_links(self.links)
-        new_nick = await self._apply_nick(member, level)
+        new_nick, err = await self._apply_nick(member, level)
         if not new_nick:
-            await interaction.followup.send('⚠️ Non posso modificare il tuo nickname (permessi o gerarchia). Collegamento salvato comunque.', ephemeral=True)
+            await interaction.followup.send(f'⚠️ Collegato `{username}` (livello `{level}`) ma nickname non modificato: {err}.', ephemeral=True)
         else:
             await interaction.followup.send(f'✅ Collegato `{username}`. Livello BedWars: `{level}`. Nick aggiornato: **{new_nick}**', ephemeral=True)
 
@@ -161,9 +173,9 @@ class LoginCog(commands.Cog):
         data['last_level'] = level
         data['last_check_ts'] = time.time()
         _save_links(self.links)
-        new_nick = await self._apply_nick(interaction.user, level)
+        new_nick, err = await self._apply_nick(interaction.user, level)
         if not new_nick:
-            await interaction.followup.send('⚠️ Collegamento aggiornato ma impossibile cambiare nickname (permessi).', ephemeral=True)
+            await interaction.followup.send(f'⚠️ Livello aggiornato a `{level}` ma nickname invariato: {err}.', ephemeral=True)
         else:
             await interaction.followup.send(f'✅ Nick aggiornato con livello `{level}`.', ephemeral=True)
 
