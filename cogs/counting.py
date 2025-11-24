@@ -33,12 +33,13 @@ def save_json(path, data):
         print(f"[Counting] Error saving {path}: {e}")
 
 DEFAULT_CONFIG = {
-    "milestones": [100, 500, 1000, 5000, 10000],
+    "milestones": [67, 100, 500, 666, 999, 1000, 5000, 10000],
     "log_channel_id": None,
     "timeout_minutes": 1,
     "success_emoji": "<a:Corretto:1441169877552599253>",
     "error_emoji": "<a:Sbagliato:1441165123568930896>",
     "milestone_emoji": "<a:Fuoco:1381953999829336206>",
+    "milestone_emojis": {},  # mapping numero milestone -> emoji id personalizzata
     "special_numbers": {
         "67": "<a:67:1441169460345176197>",
         "100": "<a:100:1441169427533009118>",
@@ -122,9 +123,15 @@ class Counting(commands.Cog):
             return await interaction.response.send_message("Emoji non valida.", ephemeral=True)
 
         if type.isdigit():
+            # Se è un numero milestone presente nella lista milestones, salvarlo in milestone_emojis
+            if int(type) in self.config.get("milestones", []):
+                self.config.setdefault("milestone_emojis", {})[type] = emoji_id
+                save_json(CONFIG_FILE, self.config)
+                return await interaction.response.send_message(f"Emoji personalizzata per la milestone {type} impostata!", ephemeral=True)
+            # Altrimenti trattalo come numero speciale
             self.config["special_numbers"][type] = emoji_id
             save_json(CONFIG_FILE, self.config)
-            return await interaction.response.send_message(f"Emoji per il numero {type} impostata!")
+            return await interaction.response.send_message(f"Emoji per il numero speciale {type} impostata!", ephemeral=True)
 
         key = f"{type}_emoji"
         self.config[key] = emoji_id
@@ -260,10 +267,25 @@ class Counting(commands.Cog):
             pass
 
         if num in chan_conf.get("milestones", []):
-            m_emoji = self._get_emoji(message.guild, "milestone_emoji") or "🎉"
+            # Usa emoji specifica se configurata per quel numero
+            milestone_emojis = self.config.get("milestone_emojis", {})
+            specific_raw = milestone_emojis.get(str(num))
+            m_emoji = None
+            if specific_raw:
+                # Temporaneamente inserisci in config per riutilizzare _get_emoji
+                self.config["_temp_milestone_lookup"] = specific_raw
+                m_emoji = self._get_emoji(message.guild, "_temp_milestone_lookup")
+                self.config.pop("_temp_milestone_lookup", None)
+            if not m_emoji:
+                m_emoji = self._get_emoji(message.guild, "milestone_emoji") or "🎉"
+            # Aggiungi anche la reaction milestone al messaggio originale
+            try:
+                await message.add_reaction(m_emoji)
+            except Exception:
+                pass
             try:
                 await message.channel.send(f"{m_emoji} Milestone **{num}** raggiunta da {message.author.mention}!")
-            except:
+            except Exception:
                 pass
 
         special = self.config.get("special_numbers", {})
