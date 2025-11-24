@@ -314,6 +314,37 @@ class Counting(commands.Cog):
                 # Ignore if lacking permissions or API failure
                 pass
 
+    @counting_group.command(name="leaderboard", description="Mostra la classifica del counting")
+    @app_commands.describe(page="Numero pagina (da 1)")
+    async def counting_leaderboard(self, interaction: discord.Interaction, page: int = 1):
+        await interaction.response.defer()
+        page = max(1, int(page or 1))
+        page_size = 10
+        guild_id = str(interaction.guild.id)
+        self._ensure_guild(guild_id)
+        lb = self.leaderboard.get(guild_id, {})
+        items = [(int(uid), int(count)) for uid, count in lb.items()]
+        items.sort(key=lambda x: x[1], reverse=True)
+        offset = (page - 1) * page_size
+        slice_items = items[offset:offset + page_size]
+        if not slice_items:
+            await interaction.followup.send("Nessun dato per questa pagina.")
+            return
+        lines = []
+        rank_start = offset + 1
+        for i, (uid, count) in enumerate(slice_items, start=rank_start):
+            member = interaction.guild.get_member(uid)
+            if not member:
+                try:
+                    member = await interaction.guild.fetch_member(uid)
+                except Exception:
+                    member = None
+            mention = member.mention if member else uid
+            lines.append(f"**#{i}** {mention} — {count} messaggi corretti")
+        embed = discord.Embed(title="Counting Leaderboard", description="\n".join(lines), color=0x14ff72)
+        embed.set_footer(text=f"Pagina {page}")
+        await interaction.followup.send(embed=embed)
+
 
 # --- EXTENSION SETUP ---
 async def setup(bot: commands.Bot):
