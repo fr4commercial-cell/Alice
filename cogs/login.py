@@ -37,6 +37,7 @@ class LoginCog(commands.Cog):
         # Struttura: { user_id: { minecraft, last_level, last_check_ts } }
         # Aggiunge sezione impostazioni globale: __settings__ -> { suffix }
         if '__settings__' not in self.links or not isinstance(self.links['__settings__'], dict):
+            # Ripristina simbolo ✪ come suffisso di default
             self.links['__settings__'] = {'suffix': '✪'}
         for uid, data in self.links.items():
             if 'last_check_ts' not in data:
@@ -252,7 +253,7 @@ class LoginCog(commands.Cog):
         for user_id, mc, lvl in chunk:
             mention = f'<@{user_id}>'
             lvl_str = str(lvl) if lvl is not None else '?'
-            lines.append(f'{mention} • `{mc}` • ⭐ {lvl_str}')
+            lines.append(f'{mention} • `{mc}` • ✪ {lvl_str}')
         desc = '\n'.join(lines)
         embed = discord.Embed(title='Utenti collegati Minecraft', description=desc, color=discord.Color.gold())
         embed.set_footer(text=f'Pagina {page}/{total_pages} • Totale {len(entries)} utenti')
