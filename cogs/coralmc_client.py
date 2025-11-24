@@ -80,7 +80,12 @@ class CoralMCClient:
 
     @staticmethod
     def is_username_valid(username: str) -> bool:
-        return 3 <= len(username) <= 16 and bool(re.match(r"^[a-zA-Z0-9_]+$", username))
+        # Validazione rilassata: accetta qualsiasi username non vuoto fino a 32 caratteri.
+        # Rimuove il vincolo su pattern Minecraft classico per consentire varianti / future modifiche.
+        if not username:
+            return False
+        username = username.strip()
+        return 1 <= len(username) <= 32
 
     async def _get_json(self, endpoint: str) -> Dict[str, Any]:
         async with self._lock:
@@ -120,21 +125,25 @@ class CoralMCClient:
         return normalized[:limit]
 
     async def get_player_stats(self, username: str) -> Optional[PlayerStats]:
-        if not self.is_username_valid(username):
+        # Validazione disattivata: tenta sempre la chiamata API.
+        sanitized = username.strip()
+        if not sanitized:
             return None
         if self.session is None:
             self.session = aiohttp.ClientSession()
-        json_data = await self._get_json(f"{self.BASE_URL}{username}")
+        json_data = await self._get_json(f"{self.BASE_URL}{sanitized}")
         if json_data.get("error") is not None:
             return None
         return PlayerStats.from_json(json_data)
 
     async def get_player_info(self, username: str) -> Optional[PlayerInfo]:
-        if not self.is_username_valid(username):
+        # Validazione disattivata: tenta sempre la chiamata API.
+        sanitized = username.strip()
+        if not sanitized:
             return None
         if self.session is None:
             self.session = aiohttp.ClientSession()
-        json_data = await self._get_json(f"{self.BASE_URL}{username}/infos")
+        json_data = await self._get_json(f"{self.BASE_URL}{sanitized}/infos")
         return PlayerInfo.from_json(json_data)
 
     async def close(self) -> None:
