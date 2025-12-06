@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands, ui
 import json
 import os
-import html as htmlescape
 from datetime import datetime
 from typing import Optional
 
@@ -200,20 +199,44 @@ class TicketFormView(ui.View):
     async def open_modal(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(self.modal)
 
-class TranscriptButton(ui.View):
-    def __init__(self, cog):
+class TicketControlsView(ui.View):
+    def __init__(self, cog: 'Tickets'):
         super().__init__(timeout=None)
         self.cog = cog
 
     @ui.button(label="📄 Transcript", style=discord.ButtonStyle.blurple, custom_id="ticket_transcript_btn")
     async def transcript(self, interaction: discord.Interaction, button: ui.Button):
-        if not any(r.id in self.cog.config.get("staff_role_id", []) for r in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
+        if not self.cog._is_staff(interaction.user):
             try:
-                await interaction.response.send_message("❌ Solo lo staff può usare questo pulsante.", ephemeral=True)
-            except:
+                await interaction.response.send_message("❌ Solo lo staff può generare il transcript.", ephemeral=True)
+            except Exception:
                 pass
             return
         await self.cog.generate_transcript(interaction, invoked_by="button")
+
+    @ui.button(label="Chiudi Ticket", style=discord.ButtonStyle.secondary, custom_id="ticket_close_btn")
+    async def close_ticket_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.cog.close_ticket(interaction)
+
+    @ui.button(label="Elimina Ticket", style=discord.ButtonStyle.danger, custom_id="ticket_delete_btn")
+    async def delete_ticket_button(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.cog._is_staff(interaction.user):
+            try:
+                await interaction.response.send_message("❌ Solo lo staff può eliminare i ticket.", ephemeral=True)
+            except Exception:
+                pass
+            return
+        await self.cog.delete_ticket(interaction)
+
+    @ui.button(label="Riapri Ticket", style=discord.ButtonStyle.success, custom_id="ticket_reopen_btn")
+    async def reopen_ticket_button(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.cog._is_staff(interaction.user):
+            try:
+                await interaction.response.send_message("❌ Solo lo staff può riaprire i ticket.", ephemeral=True)
+            except Exception:
+                pass
+            return
+        await self.cog.reopen_ticket(interaction)
 
 class TicketPanelButton(ui.Button):
     def __init__(self, panel, cog):
@@ -278,8 +301,8 @@ class TicketPanelButton(ui.Button):
             embed.set_image(url=self.panel['image'])
 
         try:
-            transcript_view = TranscriptButton(self.cog)
-            await ticket_channel.send(embed=embed, view=transcript_view)
+            controls_view = TicketControlsView(self.cog)
+            await ticket_channel.send(embed=embed, view=controls_view)
             if self.panel.get('fields'):
                 modal = TicketFormModal(self.panel, self.cog)
                 view = TicketFormView(modal)
@@ -318,6 +341,16 @@ class Tickets(commands.Cog):
 
     def save_tickets(self):
         save_json(TICKETS_FILE, self.tickets)
+
+    def _is_staff(self, member: discord.Member) -> bool:
+        staff_role_id = self.config.get("staff_role_id")
+        staff_role = None
+        try:
+            if staff_role_id:
+                staff_role = member.guild.get_role(int(staff_role_id))
+        except Exception:
+            staff_role = None
+        return bool(member.guild_permissions.administrator or (staff_role and staff_role in member.roles))
 
     async def _resolve_ticket_category(self, guild: discord.Guild, panel: Optional[dict] = None) -> Optional[discord.CategoryChannel]:
         category_id = self.config.get("category_id")
@@ -381,102 +414,37 @@ class Tickets(commands.Cog):
         txt_lines.append(f"Generato da: {interaction.user} (modo: {invoked_by})")
         txt_lines.append("")
         txt_lines.append("----- MESSAGGI -----")
-
-        html_parts = []
-        html_parts.append("<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>")
-        html_parts.append(f"<title>Transcript {htmlescape.escape(channel.name)}</title>")
-        html_parts.append("<style>")
-        html_parts.append(f"body{{background:#0f0f0f;color:#ffffff;font-family:Segoe UI,Arial,Helvetica,sans-serif;padding:18px}}")
-        html_parts.append(".wrap{max-width:980px;margin:0 auto}")
-        html_parts.append(".header{background:#1a1a1a;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.5);margin-bottom:14px}")
-        html_parts.append(".server{color:#bbbbbb;font-size:13px}")
-        html_parts.append(".title{font-size:18px;color:#ffffff;margin-bottom:6px}")
-        html_parts.append(".msg{background:#111214;border-radius:8px;padding:10px;margin:10px 0;border:1px solid rgba(255,255,255,0.02)}")
-        html_parts.append(".meta{font-size:12px;color:#9aa3b2;margin-bottom:6px}")
-        html_parts.append(".content{white-space:pre-wrap;color:#d5dbe5}")
-        html_parts.append(".embed{border-left:4px solid #f1d37a;background:#101214;padding:8px;margin-top:6px;border-radius:6px}")
-        html_parts.append(".attach{font-size:13px;margin-top:6px;color:#9aa3b2}")
-        html_parts.append("</style></head><body><div class='wrap'>")
-        html_parts.append("<div class='header'>")
-        html_parts.append(f"<div class='title'>📄 Transcript — {htmlescape.escape(channel.guild.name)}</div>")
-        html_parts.append(f"<div class='server'>Canale: {htmlescape.escape(channel.name)}</div>")
-        html_parts.append(f"<div class='server'>Creato da: {htmlescape.escape(str(creator))} ({author_id})</div>")
-        html_parts.append(f"<div class='server'>Aperto il: {htmlescape.escape(str(ticket.get('created_at')))}</div>")
-        html_parts.append(f"<div class='server'>Generato da: {htmlescape.escape(str(interaction.user))} (modo: {htmlescape.escape(invoked_by)})</div>")
-        html_parts.append("</div>")
-
         try:
             async for msg in channel.history(limit=None, oldest_first=True):
                 ts = msg.created_at.strftime("%d %b %Y • %H:%M:%S")
-                author_display = f"{htmlescape.escape(str(msg.author))} ({msg.author.id})"
                 content_text = msg.content or ""
                 if content_text.strip():
                     txt_lines.append(f"[{ts}] {msg.author} ({msg.author.id}): {content_text}")
                 else:
                     txt_lines.append(f"[{ts}] {msg.author} ({msg.author.id}): <Nessun testo>")
-
-                html_parts.append("<div class='msg'>")
-                html_parts.append(f"<div class='meta'><strong>{author_display}</strong> • <span>{ts}</span></div>")
-                if content_text.strip():
-                    html_parts.append(f"<div class='content'>{htmlescape.escape(content_text)}</div>")
-                else:
-                    html_parts.append("<div class='content'><i>&lt;Nessun testo&gt;</i></div>")
-
-                if msg.embeds:
-                    for emb in msg.embeds:
-                        try:
-                            html_parts.append("<div class='embed'>")
-                            if getattr(emb, "title", None):
-                                html_parts.append(f"<div><strong>{htmlescape.escape(emb.title)}</strong></div>")
-                            if getattr(emb, "description", None) and emb.description:
-                                html_parts.append(f"<div>{htmlescape.escape((emb.description or '')[:3000])}</div>")
-                            if getattr(emb, "fields", None):
-                                for field in emb.fields:
-                                    html_parts.append(f"<div><em>{htmlescape.escape(field.name)}</em>: {htmlescape.escape(field.value)}</div>")
-                            if getattr(emb, "footer", None) and emb.footer.text:
-                                html_parts.append(f"<div class='meta'>Footer: {htmlescape.escape(emb.footer.text)}</div>")
-                            html_parts.append("</div>")
-                        except:
-                            html_parts.append("<div class='embed'><em>Embed: errore nel parsing</em></div>")
-
                 if msg.attachments:
                     for att in msg.attachments:
                         try:
                             txt_lines.append(f"    [ALLEGATO] {att.filename} -> {att.url}")
-                            html_parts.append(f"<div class='attach'>📎 <a href='{htmlescape.escape(att.url)}' target='_blank'>{htmlescape.escape(att.filename)}</a></div>")
                         except:
-                            html_parts.append("<div class='attach'><em>Allegato (errore)</em></div>")
-
-                html_parts.append("</div>")
+                            pass
         except Exception as e:
             txt_lines.append(f"[ERRORE LETTURA MESSAGGI: {e}]")
-            html_parts.append(f"<div class='msg'><em>Errore lettura messaggi: {htmlescape.escape(str(e))}</em></div>")
-
-        html_parts.append("</div></body></html>")
 
         transcript_text = "\n".join(txt_lines)
-        transcript_html = "\n".join(html_parts)
 
         ensure_transcripts_dir()
 
         safe_name = channel.name.replace(" ", "_")
         timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         txt_filename = f"transcript_{safe_name}_{channel.id}_{timestamp_str}.txt"
-        html_filename = f"transcript_{safe_name}_{channel.id}_{timestamp_str}.html"
         txt_path = os.path.join(TRANSCRIPTS_DIR, txt_filename)
-        html_path = os.path.join(TRANSCRIPTS_DIR, html_filename)
 
         try:
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(transcript_text)
         except:
             txt_path = None
-
-        try:
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(transcript_html)
-        except:
-            html_path = None
 
         log_channel = None
         log_ch_id = self.config.get("log_channel_id")
@@ -491,8 +459,6 @@ class Tickets(commands.Cog):
         if log_channel:
             try:
                 files = []
-                if html_path:
-                    files.append(discord.File(html_path, filename=html_filename))
                 if txt_path:
                     files.append(discord.File(txt_path, filename=txt_filename))
                 if files:
@@ -513,13 +479,8 @@ class Tickets(commands.Cog):
         try:
             author_member = channel.guild.get_member(author_id)
             if author_member:
-                files = []
-                if html_path:
-                    files.append(discord.File(html_path, filename=html_filename))
                 if txt_path:
-                    files.append(discord.File(txt_path, filename=txt_filename))
-                if files:
-                    await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):", files=files)
+                    await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):", file=discord.File(txt_path, filename=txt_filename))
                 else:
                     await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):\n```{transcript_text[:1900]}```")
         except:
@@ -610,8 +571,8 @@ class Tickets(commands.Cog):
         embed.set_footer(text="Usa /ticket close per chiudere il ticket")
 
         try:
-            transcript_view = TranscriptButton(self)
-            await ticket_channel.send(embed=embed, view=transcript_view)
+            controls_view = TicketControlsView(self)
+            await ticket_channel.send(embed=embed, view=controls_view)
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
         except:
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
