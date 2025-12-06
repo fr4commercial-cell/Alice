@@ -1,6 +1,6 @@
 {
   "staff_role_id": 123456789012345678,
-  "category_name": "Tickets",
+  "category_name": "Supporto Alicers",
   "panels": [
     {
       "name": "Bug & Supporto",
@@ -9,7 +9,7 @@
       "color": 16711680,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Descrivi il problema", "placeholder": "Cosa non funziona?", "required": true}
+        {"name": "Descrivi il tuo problema", "placeholder": "Scrivi in modo dettagliato ogni singolo problema (se necessario fornisci screenshot).", "required": true}
       ]
     },
     {
@@ -19,7 +19,7 @@
       "color": 16776960,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Motivazione richiesta", "placeholder": "Perché vuoi richiedere un Mod?", "required": true}
+        {"name": "Perché vuoi essere Mod Discord di Alicers?", "placeholder": "Fornisci età, motivazione per la quale vuoi essere Mod del Discord Alicers.", "required": true}
       ]
     },
     {
@@ -29,8 +29,8 @@
       "color": 65280,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Nick in game", "placeholder": "Il tuo nickname...", "required": true},
-        {"name": "Dettagli ClanWar", "placeholder": "Dettagli sulla ClanWar richiesta...", "required": true}
+        {"name": "IGN (Nick in Game)", "placeholder": "Chi di voi gioca la CW?", "required": true},
+        {"name": "Nome del Clan che ha richiesto la CW?", "placeholder": "Le persone che nomini devono far parte del clan! (Win nostra a Tavolino in caso un player vostro non faccia parte del clan)", "required": true}
       ]
     },
     {
@@ -40,7 +40,7 @@
       "color": 16711935,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Motivazione richiesta", "placeholder": "Perché vuoi questo ruolo?", "required": true}
+        {"name": "IGN (Nick in Game)", "placeholder": "Perché vuoi entrare nel clan? Quanta xp hai? (fornisci screenshot delle tue statische in game) e Quante ore giochi alle BW di CoralMC?", "required": true}
       ]
     }
   ],
