@@ -807,5 +807,5 @@ class Tickets(commands.Cog):
         embed.add_field(name="/ticket delete", value="Elimina il ticket (solo staff)", inline=False)
         await ctx.send(embed=embed)
 
-    async def setup(bot: commands.Bot):
-        await bot.add_cog(Tickets(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Tickets(bot))
