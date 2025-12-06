@@ -164,7 +164,7 @@ class Boost(commands.Cog):
         boosts = interaction.guild.premium_subscription_count
         level = interaction.guild.premium_tier
 
-        msg = f"⚡ Il server ha attualmente **{boosts} boost** (Livello **{level}**)."
+        msg = f"<a:Police:1288561278826053825> Il server ha attualmente **{boosts} <a:Boost:1288576579106246777> boost** (Livello **{level}**)."
         try:
             await interaction.response.defer(ephemeral=True)
         except Exception:
