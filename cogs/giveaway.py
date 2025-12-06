@@ -529,6 +529,177 @@ class GiveawayCog(commands.Cog):
         winners, _ = await self._end_giveaway(mid)
         await interaction.followup.send(f'✅ Giveaway `{mid}` terminato. Nuovi vincitori: {", ".join(f"<@{w}>" for w in winners) if winners else "Nessuno"}', ephemeral=True)
 
+    @gw.command(name='edit', description='Modifica un giveaway esistente (solo owner o admin)')
+    @app_commands.describe(
+        message_id='ID del messaggio giveaway',
+        prize='Nuovo premio',
+        duration='Nuova durata es. 1d2h30m (alternativa a expire)',
+        expire='Nuovo timestamp UNIX di scadenza (alternativa a duration)',
+        number_winners='Nuovo numero di vincitori'
+    )
+    @owner_or_has_permissions(Administrator=True)
+    async def slash_gwedit(self, interaction: discord.Interaction,
+                           message_id: str,
+                           prize: Optional[str] = None,
+                           duration: Optional[str] = None,
+                           expire: Optional[int] = None,
+                           number_winners: Optional[int] = None):
+        try:
+            mid = int(message_id)
+        except ValueError:
+            await interaction.response.send_message('❌ message_id non valido.', ephemeral=True)
+            return
+
+        data = self.load_giveaway(mid)
+        if not data:
+            await interaction.response.send_message('❌ Giveaway non trovato.', ephemeral=True)
+            return
+
+        if data.get('status', 'active') != 'active':
+            await interaction.response.send_message('ℹ️ Puoi modificare solo giveaway attivi.', ephemeral=True)
+            return
+
+        if duration and expire:
+            await interaction.response.send_message('❌ Specifica solo duration oppure expire, non entrambi.', ephemeral=True)
+            return
+
+        pending_changes = []
+        new_expire_epoch = None
+        new_duration_text = None
+
+        if prize is not None:
+            pending_changes.append('premio')
+
+        if duration:
+            seconds = _parse_duration(duration)
+            if not seconds:
+                await interaction.response.send_message('❌ Durata non valida. Usa formato tipo 1d2h30m.', ephemeral=True)
+                return
+            new_expire_epoch = _utcnow_epoch() + seconds
+            new_duration_text = duration
+            pending_changes.append('scadenza')
+        elif expire is not None:
+            try:
+                new_expire_epoch = int(expire)
+            except (TypeError, ValueError):
+                await interaction.response.send_message('❌ Timestamp expire non valido.', ephemeral=True)
+                return
+            new_duration_text = data.get('duration_text')
+            pending_changes.append('scadenza')
+
+        if number_winners is not None:
+            if number_winners < 1:
+                await interaction.response.send_message('❌ Il numero di vincitori deve essere almeno 1.', ephemeral=True)
+                return
+            pending_changes.append('numero vincitori')
+
+        if not pending_changes:
+            await interaction.response.send_message('ℹ️ Nessuna modifica specificata.', ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        if prize is not None:
+            data['prize'] = prize
+
+        if new_expire_epoch is not None:
+            data['expire_epoch'] = new_expire_epoch
+            data['duration_text'] = new_duration_text
+
+        if number_winners is not None:
+            data['number_winners'] = number_winners
+
+        data['updated_at'] = _utcnow_iso()
+        self.save_giveaway(mid, data)
+
+        entrants = data.get('entrants', [])
+        guild = interaction.guild or self.bot.get_guild(data.get('guild_id'))
+        channel = guild.get_channel(data.get('channel_id')) if guild else None
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(data.get('channel_id'))
+            except Exception:
+                channel = None
+
+        message_updated = False
+        if channel:
+            try:
+                msg = await channel.fetch_message(mid)
+            except Exception:
+                msg = None
+            if msg:
+                try:
+                    updated_embed = self._build_embed(guild, data)
+                    prize_value = data.get('prize') or 'N/A'
+                    expire_epoch = data.get('expire_epoch')
+                    expire_value = _format_discord_time(expire_epoch) if expire_epoch else 'N/A'
+                    host_value = f"<@{data.get('host')}>" if data.get('host') else 'Sconosciuto'
+                    updated_embed.add_field(name='Premio', value=prize_value, inline=False)
+                    updated_embed.add_field(name='Scade', value=expire_value, inline=True)
+                    updated_embed.add_field(name='Host', value=host_value, inline=True)
+                    updated_embed.add_field(name=f'Partecipanti ({len(entrants)})', value='Premi "Partecipa" per unirti', inline=False)
+                    await msg.edit(embed=updated_embed, view=GiveawayView(self, message_id=mid))
+                    message_updated = True
+                except Exception:
+                    pass
+
+        changes_text = ', '.join(pending_changes)
+        if message_updated:
+            await interaction.followup.send(f'✅ Giveaway `{mid}` aggiornato ({changes_text}).', ephemeral=True)
+        else:
+            await interaction.followup.send(f'✅ Giveaway `{mid}` aggiornato ({changes_text}), ma non è stato possibile aggiornare il messaggio originale.', ephemeral=True)
+
+    @gw.command(name='roll', description='Estrai un vincitore senza terminare il giveaway (solo owner o admin)')
+    @app_commands.describe(message_id='ID del messaggio giveaway')
+    @owner_or_has_permissions(Administrator=True)
+    async def slash_gwroll(self, interaction: discord.Interaction, message_id: str):
+        try:
+            mid = int(message_id)
+        except ValueError:
+            await interaction.response.send_message('❌ message_id non valido.', ephemeral=True)
+            return
+
+        data = self.load_giveaway(mid)
+        if not data:
+            await interaction.response.send_message('❌ Giveaway non trovato.', ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        entrants = data.get('entrants', [])
+        existing_winners = set(data.get('winners', []))
+        pool = [uid for uid in _eligible_entrants(data.get('guild_id', interaction.guild_id or 0), entrants) if uid not in existing_winners]
+        if not pool:
+            await interaction.followup.send('ℹ️ Nessun partecipante idoneo da estrarre.', ephemeral=True)
+            return
+
+        winner_id = random.choice(pool)
+        data.setdefault('winners', [])
+        if winner_id not in data['winners']:
+            data['winners'].append(winner_id)
+            data['updated_at'] = _utcnow_iso()
+            self.save_giveaway(mid, data)
+
+        guild = interaction.guild or self.bot.get_guild(data.get('guild_id'))
+        channel = None
+        if guild:
+            channel = guild.get_channel(data.get('channel_id'))
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(data.get('channel_id'))
+            except Exception:
+                channel = None
+
+        announcement = f'🎉 Vincitore estratto: <@{winner_id}> — Giveaway `{mid}`'
+        if channel:
+            try:
+                await channel.send(announcement)
+            except Exception:
+                pass
+
+        location = channel.mention if channel else 'nessun canale (annuncio non inviato)'
+        await interaction.followup.send(f'{announcement} — Annuncio: {location}', ephemeral=True)
+
     @gw.command(name='remove', description='Rimuovi forzatamente un membro dal giveaway (solo owner o admin)')
     @app_commands.describe(message_id='ID del messaggio giveaway', user='Utente da rimuovere')
     @owner_or_has_permissions(Administrator=True)
