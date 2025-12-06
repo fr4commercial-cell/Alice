@@ -9,19 +9,20 @@ from typing import Optional
 
 BASE_DIR = os.path.dirname(__file__)
 TICKETS_FILE = os.path.join(BASE_DIR, '..', 'tickets.json')
-CONFIG_FILE = os.path.join(BASE_DIR, '..', 'config.json')
+CONFIG_FILE = os.path.join(BASE_DIR, '..', 'config_tickets.json')
 TRANSCRIPTS_DIR = os.path.join(os.path.dirname(BASE_DIR), "transcripts")
 
 # ------------------ CONFIG AUTOMATICA PREMIUM ------------------
 DEFAULT_AUTO_CONFIG = {
     "staff_role_id": 123456789012345678,
+    "category_id": None,
     "panels": [
 
         {
             "name": "Bug & Supporto",
             "emoji": "<a:Attenzione:1441165315726905456>",
             "description": "Segnala bug o richiedi assistenza tecnica in modo dettagliato.",
-            "color": 0xE6C44C,
+            "color": 16711680,
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Bug & Supporto",
             "fields": [
@@ -47,7 +48,7 @@ DEFAULT_AUTO_CONFIG = {
             "name": "Richiesta CW",
             "emoji": "<:Spade:1406304639326097408>",
             "description": "Richiedi CW: controlli, attivazioni o autorizzazioni.",
-            "color": 0xE6C44C,
+            "color": 65280,
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – CW",
             "fields": [
@@ -68,7 +69,7 @@ DEFAULT_AUTO_CONFIG = {
             "name": "Richiesta Mod DS",
             "emoji": "<:ModDiscord:1406397342914973888>",
             "description": "Richiedi interventi o modifiche relativi a DS.",
-            "color": 0xE6C44C,
+            "color": 16711680,
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Mod DS",
             "fields": [
@@ -89,7 +90,7 @@ DEFAULT_AUTO_CONFIG = {
             "name": "Richiesta Alicers",
             "emoji": "<a:Corona:1406397702610227240>",
             "description": "Richiedi interventi o modifiche riguardanti gli Alicers.",
-            "color": 0xE6C44C,
+            "color": 16711935,
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Alicers",
             "fields": [
@@ -114,7 +115,14 @@ def load_or_create_config():
         return DEFAULT_AUTO_CONFIG
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError('config malformed')
+        merged = {**DEFAULT_AUTO_CONFIG, **data}
+        if 'panels' not in merged or not isinstance(merged['panels'], list):
+            merged['panels'] = DEFAULT_AUTO_CONFIG['panels']
+        save_json(CONFIG_FILE, merged)
+        return merged
     except Exception:
         save_json(CONFIG_FILE, DEFAULT_AUTO_CONFIG)
         return DEFAULT_AUTO_CONFIG
@@ -223,15 +231,10 @@ class TicketPanelButton(ui.Button):
             await interaction.followup.send("Errore: comando non eseguibile qui.", ephemeral=True)
             return
 
-        # CATEGORIA, creata se manca
-        category_name = panel_category = self.panel.get('category', 'Tickets')
-        category = discord.utils.get(guild.categories, name=category_name)
+        category = await self.cog._resolve_ticket_category(guild, panel=self.panel)
         if category is None:
-            try:
-                category = await guild.create_category(category_name)
-            except Exception as e:
-                await interaction.followup.send(f"❌ Errore nella creazione della categoria: {e}", ephemeral=True)
-                return
+            await interaction.followup.send("❌ Categoria ticket configurata non trovata. Contatta lo staff per verificare l'ID nel file di configurazione.", ephemeral=True)
+            return
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -315,6 +318,34 @@ class Tickets(commands.Cog):
 
     def save_tickets(self):
         save_json(TICKETS_FILE, self.tickets)
+
+    async def _resolve_ticket_category(self, guild: discord.Guild, panel: Optional[dict] = None) -> Optional[discord.CategoryChannel]:
+        category_id = self.config.get("category_id")
+        category: Optional[discord.CategoryChannel] = None
+        if category_id:
+            try:
+                category = guild.get_channel(int(category_id))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                category = None
+            if category is not None and not isinstance(category, discord.CategoryChannel):
+                category = None
+            if category is None:
+                return None
+            return category
+
+        category_name = None
+        if panel:
+            category_name = panel.get('category')
+        if not category_name:
+            category_name = self.config.get("category_name") or "Tickets"
+
+        category = discord.utils.get(guild.categories, name=category_name)
+        if category is None:
+            try:
+                category = await guild.create_category(category_name)
+            except Exception:
+                return None
+        return category
 
     async def generate_transcript(self, interaction: discord.Interaction, invoked_by: str = "unknown"):
         try:
@@ -535,14 +566,10 @@ class Tickets(commands.Cog):
             await interaction.followup.send("Errore: comando non eseguibile qui.", ephemeral=True)
             return
 
-        category_name = "Tickets"
-        category = discord.utils.get(guild.categories, name=category_name)
+        category = await self._resolve_ticket_category(guild)
         if category is None:
-            try:
-                category = await guild.create_category(category_name)
-            except Exception as e:
-                await interaction.followup.send(f"❌ Errore nella creazione della categoria: {e}", ephemeral=True)
-                return
+            await interaction.followup.send("❌ Categoria ticket configurata non trovata. Contatta lo staff per verificare l'ID nel file di configurazione.", ephemeral=True)
+            return
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
