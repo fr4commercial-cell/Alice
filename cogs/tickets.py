@@ -1,4 +1,3 @@
-# cogs/tickets.py
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
@@ -13,40 +12,121 @@ TICKETS_FILE = os.path.join(BASE_DIR, '..', 'tickets.json')
 CONFIG_FILE = os.path.join(BASE_DIR, '..', 'config.json')
 TRANSCRIPTS_DIR = os.path.join(os.path.dirname(BASE_DIR), "transcripts")
 
-# ---------- CONFIG ----------
-STAFF_ROLES = {
-    1381342494729703606,
-    1381342426815402095,
-    1437535379342495804,
-    1207362251846066266,
-    1381342392161931444,
-    1438813413949309039,
-    1381579601200807936
-}
-LOG_CHANNEL_ID = 1440441906978099342
-# Theme: dark (C) chosen by user
-THEME = {
-    "background": "#0f1113",
-    "card": "#1e2226",
-    "muted": "#aaaaaa",
-    "accent": "#7289da",
-    "text": "#e6edf3",
-    "embed_border": "#4f545c"
-}
-# ----------------------------
+# ------------------ CONFIG AUTOMATICA PREMIUM ------------------
+DEFAULT_AUTO_CONFIG = {
+    "staff_role_id": 123456789012345678,
+    "panels": [
 
-def ensure_transcripts_dir():
+        {
+            "name": "Bug & Supporto",
+            "emoji": "<a:Attenzione:1441165315726905456>",
+            "description": "Segnala bug o richiedi assistenza tecnica in modo dettagliato.",
+            "color": 0xE6C44C,
+            "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+            "category": "Tickets – Bug & Supporto",
+            "fields": [
+                {
+                    "name": "Tipo di richiesta",
+                    "placeholder": "Bug / Assistenza / Altro",
+                    "required": True
+                },
+                {
+                    "name": "Descrizione del problema",
+                    "placeholder": "Spiega dettagliatamente cosa sta succedendo.",
+                    "required": True
+                },
+                {
+                    "name": "Come riprodurlo (se bug)",
+                    "placeholder": "1. ... 2. ... 3. ... (opzionale)",
+                    "required": False
+                }
+            ]
+        },
+
+        {
+            "name": "Richiesta CW",
+            "emoji": "<:Spade:1406304639326097408>",
+            "description": "Richiedi CW: controlli, attivazioni o autorizzazioni.",
+            "color": 0xE6C44C,
+            "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+            "category": "Tickets – CW",
+            "fields": [
+                {
+                    "name": "Motivo della richiesta",
+                    "placeholder": "Perché richiedi il CW?",
+                    "required": True
+                },
+                {
+                    "name": "ID Utente / Riferimento",
+                    "placeholder": "Inserisci eventuali ID o riferimenti (opzionale)",
+                    "required": False
+                }
+            ]
+        },
+
+        {
+            "name": "Richiesta Mod DS",
+            "emoji": "<:ModDiscord:1406397342914973888>",
+            "description": "Richiedi interventi o modifiche relativi a DS.",
+            "color": 0xE6C44C,
+            "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+            "category": "Tickets – Mod DS",
+            "fields": [
+                {
+                    "name": "Tipo di richiesta",
+                    "placeholder": "Modifica / Assistenza / Altro",
+                    "required": True
+                },
+                {
+                    "name": "Dettagli",
+                    "placeholder": "Spiega in modo chiaro cosa ti serve.",
+                    "required": True
+                }
+            ]
+        },
+
+        {
+            "name": "Richiesta Alicers",
+            "emoji": "<a:Corona:1406397702610227240>",
+            "description": "Richiedi interventi o modifiche riguardanti gli Alicers.",
+            "color": 0xE6C44C,
+            "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+            "category": "Tickets – Alicers",
+            "fields": [
+                {
+                    "name": "Descrizione richiesta",
+                    "placeholder": "Quale intervento desideri dagli Alicers?",
+                    "required": True
+                },
+                {
+                    "name": "Priorità",
+                    "placeholder": "Bassa / Media / Alta",
+                    "required": False
+                }
+            ]
+        }
+    ]
+}
+
+def load_or_create_config():
+    if not os.path.exists(CONFIG_FILE):
+        save_json(CONFIG_FILE, DEFAULT_AUTO_CONFIG)
+        return DEFAULT_AUTO_CONFIG
     try:
-        os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
     except Exception:
-        pass
+        save_json(CONFIG_FILE, DEFAULT_AUTO_CONFIG)
+        return DEFAULT_AUTO_CONFIG
 
 def load_json(path, default):
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
     except Exception:
-        return default
+        pass
+    return default
 
 def save_json(path, data):
     try:
@@ -55,6 +135,11 @@ def save_json(path, data):
     except Exception:
         pass
 
+def ensure_transcripts_dir():
+    try:
+        os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+    except Exception:
+        pass
 
 # ------------------ Modal & Views ------------------
 class TicketFormModal(ui.Modal):
@@ -73,8 +158,8 @@ class TicketFormModal(ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title=f"📋 Informazioni Ticket - {self.panel.get('name')}",
-            color=self.panel.get('color', 0x2ECC71),
+            title=f"📋 Informazioni Ticket — {self.panel.get('name')}",
+            color=self.panel.get('color', 0xE6C44C),
             timestamp=datetime.utcnow()
         )
         for i, child in enumerate(self.children):
@@ -86,18 +171,17 @@ class TicketFormModal(ui.Modal):
 
         try:
             await interaction.response.send_message("✅ Informazioni registrate!", ephemeral=True)
-        except Exception:
+        except:
             try:
                 await interaction.followup.send("✅ Informazioni registrate!", ephemeral=True)
-            except Exception:
+            except:
                 pass
 
         try:
             if interaction.channel:
                 await interaction.channel.send(embed=embed)
-        except Exception:
+        except:
             pass
-
 
 class TicketFormView(ui.View):
     def __init__(self, modal: TicketFormModal):
@@ -108,7 +192,6 @@ class TicketFormView(ui.View):
     async def open_modal(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(self.modal)
 
-
 class TranscriptButton(ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
@@ -116,24 +199,20 @@ class TranscriptButton(ui.View):
 
     @ui.button(label="📄 Transcript", style=discord.ButtonStyle.blurple, custom_id="ticket_transcript_btn")
     async def transcript(self, interaction: discord.Interaction, button: ui.Button):
-        # Only staff can use this button
-        if not any(r.id in STAFF_ROLES for r in interaction.user.roles):
+        if not any(r.id in self.cog.config.get("staff_role_id", []) for r in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
             try:
                 await interaction.response.send_message("❌ Solo lo staff può usare questo pulsante.", ephemeral=True)
-            except Exception:
+            except:
                 pass
             return
         await self.cog.generate_transcript(interaction, invoked_by="button")
 
-
 class TicketPanelButton(ui.Button):
     def __init__(self, panel, cog):
-        super().__init__(
-            label=panel.get('name', 'Ticket'),
-            emoji=panel.get('emoji', None),
-            style=discord.ButtonStyle.primary,
-            custom_id=f"ticket_panel_{panel.get('name', 'panel').lower().replace(' ', '_')}"
-        )
+        label = panel.get('name', 'Ticket')
+        emoji = panel.get('emoji', None)
+        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary,
+                         custom_id=f"ticket_panel_{panel.get('name','panel').lower().replace(' ', '_')}")
         self.panel = panel
         self.cog = cog
 
@@ -144,10 +223,12 @@ class TicketPanelButton(ui.Button):
             await interaction.followup.send("Errore: comando non eseguibile qui.", ephemeral=True)
             return
 
-        category = discord.utils.get(guild.categories, name="Tickets")
+        # CATEGORIA, creata se manca
+        category_name = panel_category = self.panel.get('category', 'Tickets')
+        category = discord.utils.get(guild.categories, name=category_name)
         if category is None:
             try:
-                category = await guild.create_category("Tickets")
+                category = await guild.create_category(category_name)
             except Exception as e:
                 await interaction.followup.send(f"❌ Errore nella creazione della categoria: {e}", ephemeral=True)
                 return
@@ -184,7 +265,7 @@ class TicketPanelButton(ui.Button):
         embed = discord.Embed(
             title=f"🎟️ Ticket: {self.panel.get('name')}",
             description=self.panel.get('description', ''),
-            color=self.panel.get('color', 0x2ECC71)
+            color=self.panel.get('color', 0xE6C44C)
         )
         embed.add_field(name="ID Ticket", value=ticket_id, inline=False)
         embed.add_field(name="Richiedente", value=interaction.user.mention, inline=False)
@@ -200,11 +281,10 @@ class TicketPanelButton(ui.Button):
                 modal = TicketFormModal(self.panel, self.cog)
                 view = TicketFormView(modal)
                 await ticket_channel.send("Premi il pulsante per compilare le informazioni del ticket:", view=view)
-        except Exception:
+        except:
             pass
 
         await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
-
 
 class TicketPanelsView(ui.View):
     def __init__(self, panels, cog):
@@ -219,7 +299,8 @@ class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.tickets = load_json(TICKETS_FILE, {})
-        self.config = load_json(CONFIG_FILE, {})
+        self.config = load_or_create_config()
+        ensure_transcripts_dir()
 
         self.ticket_group = app_commands.Group(name="ticket", description="Gestione tickets")
         self.ticket_group.command(name="panel", description="Mostra il pannello per creare ticket")(self.ticket_panel)
@@ -232,29 +313,20 @@ class Tickets(commands.Cog):
         except Exception:
             pass
 
-        ensure_transcripts_dir()
-
     def save_tickets(self):
         save_json(TICKETS_FILE, self.tickets)
 
-    def save_config(self):
-        save_json(CONFIG_FILE, self.config)
-
     async def generate_transcript(self, interaction: discord.Interaction, invoked_by: str = "unknown"):
-        """
-        Genera transcript TXT + HTML (tema scuro, logo testuale),
-        salva in ./transcripts/ e invia file HTML+TXT al channel log e in DM al creatore.
-        """
         try:
             await interaction.response.defer(ephemeral=True)
-        except Exception:
+        except:
             pass
 
         channel = interaction.channel
         if channel is None:
             try:
                 await interaction.followup.send("❌ Impossibile leggere il canale.", ephemeral=True)
-            except Exception:
+            except:
                 pass
             return
 
@@ -262,14 +334,13 @@ class Tickets(commands.Cog):
         if channel_id not in self.tickets:
             try:
                 await interaction.followup.send("❌ Questo non è un canale ticket!", ephemeral=True)
-            except Exception:
+            except:
                 pass
             return
 
         ticket = self.tickets[channel_id]
         author_id = ticket.get('author')
 
-        # Prepare text and HTML
         txt_lines = []
         txt_lines.append(f"===== TRANSCRIPT TICKET {channel.name} =====")
         txt_lines.append(f"Server: {channel.guild.name} ({channel.guild.id})")
@@ -280,32 +351,29 @@ class Tickets(commands.Cog):
         txt_lines.append("")
         txt_lines.append("----- MESSAGGI -----")
 
-        # HTML header / style (dark theme)
         html_parts = []
         html_parts.append("<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>")
         html_parts.append(f"<title>Transcript {htmlescape.escape(channel.name)}</title>")
         html_parts.append("<style>")
-        html_parts.append(f"body{{background:{THEME['background']};color:{THEME['text']};font-family:Segoe UI,Arial,Helvetica,sans-serif;padding:18px}}")
+        html_parts.append(f"body{{background:#0f0f0f;color:#ffffff;font-family:Segoe UI,Arial,Helvetica,sans-serif;padding:18px}}")
         html_parts.append(".wrap{max-width:980px;margin:0 auto}")
-        html_parts.append(f".header{{background:{THEME['card']};padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.5);margin-bottom:14px}}")
-        html_parts.append(f".server{{color:{THEME['muted']};font-size:13px}}")
-        html_parts.append(f".title{{font-size:18px;color:{THEME['text']};margin-bottom:6px}}")
+        html_parts.append(".header{background:#1a1a1a;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.5);margin-bottom:14px}")
+        html_parts.append(".server{color:#bbbbbb;font-size:13px}")
+        html_parts.append(".title{font-size:18px;color:#ffffff;margin-bottom:6px}")
         html_parts.append(".msg{background:#111214;border-radius:8px;padding:10px;margin:10px 0;border:1px solid rgba(255,255,255,0.02)}")
         html_parts.append(".meta{font-size:12px;color:#9aa3b2;margin-bottom:6px}")
         html_parts.append(".content{white-space:pre-wrap;color:#d5dbe5}")
-        html_parts.append(f".embed{{border-left:4px solid {THEME['embed_border']};background:#101214;padding:8px;margin-top:6px;border-radius:6px}}")
+        html_parts.append(".embed{border-left:4px solid #f1d37a;background:#101214;padding:8px;margin-top:6px;border-radius:6px}")
         html_parts.append(".attach{font-size:13px;margin-top:6px;color:#9aa3b2}")
         html_parts.append("</style></head><body><div class='wrap'>")
-        # logo textual (server name)
         html_parts.append("<div class='header'>")
         html_parts.append(f"<div class='title'>📄 Transcript — {htmlescape.escape(channel.guild.name)}</div>")
-        html_parts.append(f"<div class='server'>Canale: {htmlescape.escape(channel.name)} • Server ID: {channel.guild.id}</div>")
+        html_parts.append(f"<div class='server'>Canale: {htmlescape.escape(channel.name)}</div>")
         html_parts.append(f"<div class='server'>Creato da: {htmlescape.escape(str(creator))} ({author_id})</div>")
         html_parts.append(f"<div class='server'>Aperto il: {htmlescape.escape(str(ticket.get('created_at')))}</div>")
         html_parts.append(f"<div class='server'>Generato da: {htmlescape.escape(str(interaction.user))} (modo: {htmlescape.escape(invoked_by)})</div>")
         html_parts.append("</div>")
 
-        # iterate history
         try:
             async for msg in channel.history(limit=None, oldest_first=True):
                 ts = msg.created_at.strftime("%d %b %Y • %H:%M:%S")
@@ -316,7 +384,6 @@ class Tickets(commands.Cog):
                 else:
                     txt_lines.append(f"[{ts}] {msg.author} ({msg.author.id}): <Nessun testo>")
 
-                # HTML message
                 html_parts.append("<div class='msg'>")
                 html_parts.append(f"<div class='meta'><strong>{author_display}</strong> • <span>{ts}</span></div>")
                 if content_text.strip():
@@ -324,7 +391,6 @@ class Tickets(commands.Cog):
                 else:
                     html_parts.append("<div class='content'><i>&lt;Nessun testo&gt;</i></div>")
 
-                # embeds (summarize)
                 if msg.embeds:
                     for emb in msg.embeds:
                         try:
@@ -339,19 +405,18 @@ class Tickets(commands.Cog):
                             if getattr(emb, "footer", None) and emb.footer.text:
                                 html_parts.append(f"<div class='meta'>Footer: {htmlescape.escape(emb.footer.text)}</div>")
                             html_parts.append("</div>")
-                        except Exception:
+                        except:
                             html_parts.append("<div class='embed'><em>Embed: errore nel parsing</em></div>")
 
-                # attachments
                 if msg.attachments:
                     for att in msg.attachments:
                         try:
                             txt_lines.append(f"    [ALLEGATO] {att.filename} -> {att.url}")
                             html_parts.append(f"<div class='attach'>📎 <a href='{htmlescape.escape(att.url)}' target='_blank'>{htmlescape.escape(att.filename)}</a></div>")
-                        except Exception:
-                            html_parts.append("<div class='attach'>📎 <em>Allegato (errore)</em></div>")
+                        except:
+                            html_parts.append("<div class='attach'><em>Allegato (errore)</em></div>")
 
-                html_parts.append("</div>")  # end msg
+                html_parts.append("</div>")
         except Exception as e:
             txt_lines.append(f"[ERRORE LETTURA MESSAGGI: {e}]")
             html_parts.append(f"<div class='msg'><em>Errore lettura messaggi: {htmlescape.escape(str(e))}</em></div>")
@@ -361,7 +426,6 @@ class Tickets(commands.Cog):
         transcript_text = "\n".join(txt_lines)
         transcript_html = "\n".join(html_parts)
 
-        # Ensure transcripts dir exists
         ensure_transcripts_dir()
 
         safe_name = channel.name.replace(" ", "_")
@@ -374,27 +438,22 @@ class Tickets(commands.Cog):
         try:
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(transcript_text)
-        except Exception:
+        except:
             txt_path = None
 
         try:
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(transcript_html)
-        except Exception:
+        except:
             html_path = None
 
-        # Send to log channel
         log_channel = None
-        try:
-            log_channel = channel.guild.get_channel(LOG_CHANNEL_ID)
-        except Exception:
-            log_channel = None
-
-        if not log_channel:
+        log_ch_id = self.config.get("log_channel_id")
+        if log_ch_id:
             try:
-                log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
-            except Exception:
-                log_channel = None
+                log_channel = channel.guild.get_channel(log_ch_id)
+            except:
+                log_channel = self.bot.get_channel(log_ch_id)
 
         log_msg = f"📄 Transcript del ticket `{channel.name}` (invocato da {interaction.user.mention}, modo: {invoked_by})"
 
@@ -409,46 +468,40 @@ class Tickets(commands.Cog):
                     await log_channel.send(content=log_msg, files=files)
                 else:
                     await log_channel.send(content=log_msg + "\n```" + (transcript_text[:1900] or "Nessun contenuto") + "```")
-            except Exception:
+            except:
                 try:
                     await interaction.followup.send("⚠️ Non sono riuscito a inviare il transcript nel canale log (permessi?).", ephemeral=True)
-                except Exception:
+                except:
                     pass
         else:
             try:
                 await interaction.followup.send("⚠️ Canale di log non trovato; transcript salvato localmente.", ephemeral=True)
-            except Exception:
+            except:
                 pass
 
-        # DM to ticket author
         try:
             author_member = channel.guild.get_member(author_id)
             if author_member:
-                try:
-                    files = []
-                    if html_path:
-                        files.append(discord.File(html_path, filename=html_filename))
-                    if txt_path:
-                        files.append(discord.File(txt_path, filename=txt_filename))
-                    if files:
-                        await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):", files=files)
-                    else:
-                        await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):\n```{transcript_text[:1900]}```")
-                except Exception:
-                    pass
-        except Exception:
+                files = []
+                if html_path:
+                    files.append(discord.File(html_path, filename=html_filename))
+                if txt_path:
+                    files.append(discord.File(txt_path, filename=txt_filename))
+                if files:
+                    await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):", files=files)
+                else:
+                    await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):\n```{transcript_text[:1900]}```")
+        except:
             pass
 
         try:
             await interaction.followup.send("📄 Transcript generato e salvato in /transcripts/ (inviato a log + DM se possibile).", ephemeral=True)
-        except Exception:
+        except:
             pass
 
-        # Do NOT delete the files: keep them for archive as requested
-
     # ---------- Slash commands (app commands) ----------
+
     async def ticket_panel(self, interaction: discord.Interaction):
-        """/ticket panel"""
         await interaction.response.defer(ephemeral=True)
         panels = self.config.get("panels", [])
         if not panels:
@@ -458,38 +511,39 @@ class Tickets(commands.Cog):
         embed = discord.Embed(
             title="🎟️ Pannelli Ticket",
             description="Clicca su un pulsante per aprire un ticket:",
-            color=0x3498DB
+            color=0xE6C44C
         )
         for panel in panels:
-            emoji = panel.get("emoji", "📝")
-            embed.add_field(name=f"{emoji} {panel.get('name')}", value=panel.get('description', 'Nessuna descrizione'), inline=False)
+            emoji = panel.get("emoji", None)
+            name = panel.get("name", "Ticket")
+            desc = panel.get("description", "")
+            embed.add_field(name=f"{emoji} {name}" if emoji else name, value=desc, inline=False)
 
         view = TicketPanelsView(panels, self)
         try:
             await interaction.followup.send(embed=embed, view=view)
-        except Exception:
+        except:
             try:
                 await interaction.channel.send(embed=embed, view=view)
-            except Exception:
+            except:
                 await interaction.followup.send("❌ Impossibile inviare il pannello.", ephemeral=True)
 
     async def create_ticket(self, interaction: discord.Interaction, topic: str):
-        """/ticket create <topic>"""
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
             await interaction.followup.send("Errore: comando non eseguibile qui.", ephemeral=True)
             return
 
-        category = discord.utils.get(guild.categories, name="Tickets")
+        category_name = "Tickets"
+        category = discord.utils.get(guild.categories, name=category_name)
         if category is None:
             try:
-                category = await guild.create_category("Tickets")
+                category = await guild.create_category(category_name)
             except Exception as e:
                 await interaction.followup.send(f"❌ Errore nella creazione della categoria: {e}", ephemeral=True)
                 return
 
-        channel_name = f"ticket-{interaction.user.name.lower()}-{len(self.tickets) + 1}"
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -502,6 +556,7 @@ class Tickets(commands.Cog):
             if staff_role:
                 overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
+        channel_name = f"ticket-{interaction.user.name.lower()}-{len(self.tickets) + 1}"
         try:
             ticket_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
         except Exception as e:
@@ -521,7 +576,7 @@ class Tickets(commands.Cog):
         embed = discord.Embed(
             title=f"🎟️ Ticket: {topic}",
             description=f"Ticket creato da {interaction.user.mention}",
-            color=0x2ECC71
+            color=0xE6C44C
         )
         embed.add_field(name="ID Ticket", value=ticket_id, inline=False)
         embed.add_field(name="Data Creazione", value=datetime.utcnow().strftime("%d/%m/%Y %H:%M:%S"), inline=False)
@@ -531,14 +586,13 @@ class Tickets(commands.Cog):
             transcript_view = TranscriptButton(self)
             await ticket_channel.send(embed=embed, view=transcript_view)
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
-        except Exception:
+        except:
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
 
     async def close_ticket(self, interaction: discord.Interaction):
-        """/ticket close"""
         try:
             await interaction.response.defer()
-        except Exception:
+        except:
             pass
 
         channel_id = str(interaction.channel.id)
@@ -548,10 +602,8 @@ class Tickets(commands.Cog):
 
         ticket = self.tickets[channel_id]
         staff_role_id = self.config.get("staff_role_id")
-        is_staff = False
-        if staff_role_id:
-            staff_role = interaction.guild.get_role(staff_role_id)
-            is_staff = staff_role in interaction.user.roles if staff_role else False
+        staff_role = interaction.guild.get_role(staff_role_id) if staff_role_id else None
+        is_staff = staff_role in interaction.user.roles if staff_role else False
 
         if interaction.user.id != ticket['author'] and not is_staff and not interaction.user.guild_permissions.administrator:
             await interaction.followup.send("❌ Solo l'autore, lo staff o un admin può chiudere questo ticket!", ephemeral=True)
@@ -564,30 +616,29 @@ class Tickets(commands.Cog):
         if author_member:
             try:
                 await interaction.channel.set_permissions(author_member, read_messages=True, send_messages=False)
-            except Exception:
+            except:
                 pass
 
         embed = discord.Embed(
             title="🔒 Ticket Chiuso",
             description=f"Il ticket è stato chiuso da {interaction.user.mention}\nIl canale rimane visibile ma non puoi scrivere nuovi messaggi.",
-            color=0xE74C3C
+            color=0x888888
         )
 
         try:
             await interaction.followup.send("✅ Ticket chiuso.", ephemeral=True)
-        except Exception:
+        except:
             try:
                 await interaction.channel.send("✅ Ticket chiuso.")
-            except Exception:
+            except:
                 pass
 
         try:
             await interaction.channel.send(embed=embed)
-        except Exception:
+        except:
             pass
 
     async def reopen_ticket(self, interaction: discord.Interaction):
-        """/ticket reopen"""
         await interaction.response.defer()
         channel_id = str(interaction.channel.id)
         if channel_id not in self.tickets:
@@ -596,10 +647,8 @@ class Tickets(commands.Cog):
 
         ticket = self.tickets[channel_id]
         staff_role_id = self.config.get("staff_role_id")
-        is_staff = False
-        if staff_role_id:
-            staff_role = interaction.guild.get_role(staff_role_id)
-            is_staff = staff_role in interaction.user.roles if staff_role else False
+        staff_role = interaction.guild.get_role(staff_role_id) if staff_role_id else None
+        is_staff = staff_role in interaction.user.roles if staff_role else False
 
         if not is_staff and not interaction.user.guild_permissions.administrator:
             await interaction.followup.send("❌ Solo lo staff o un admin può riaprire i ticket!", ephemeral=True)
@@ -616,84 +665,80 @@ class Tickets(commands.Cog):
         if author:
             try:
                 await interaction.channel.set_permissions(author, read_messages=True, send_messages=True)
-            except Exception:
+            except:
                 pass
 
         embed = discord.Embed(
             title="🔓 Ticket Riaperto",
             description=f"Il ticket è stato riaperto da {interaction.user.mention}\nPuoi scrivere nuovi messaggi.",
-            color=0x2ECC71
+            color=0xE6C44C
         )
         try:
             await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception:
+        except:
             try:
                 await interaction.channel.send("✅ Ticket riaperto.")
-            except Exception:
+            except:
                 pass
 
         try:
             await interaction.channel.send(embed=embed)
-        except Exception:
+        except:
             pass
 
     async def delete_ticket(self, interaction: discord.Interaction):
-        """/ticket delete"""
         try:
             await interaction.response.defer(ephemeral=True)
-        except Exception:
+        except:
             pass
 
         channel = interaction.channel
-        channel_id = str(channel.id)
+        if channel is None:
+            await interaction.followup.send("❌ Impossibile eliminare: canale non valido.", ephemeral=True)
+            return
 
+        channel_id = str(channel.id)
         if channel_id not in self.tickets:
             await interaction.followup.send("❌ Questo non è un canale ticket!", ephemeral=True)
             return
 
         ticket = self.tickets[channel_id]
         staff_role_id = self.config.get("staff_role_id")
-        is_staff = False
-        if staff_role_id:
-            staff_role = interaction.guild.get_role(staff_role_id)
-            is_staff = staff_role in interaction.user.roles if staff_role else False
+        staff_role = channel.guild.get_role(staff_role_id) if staff_role_id else None
+        is_staff = staff_role in interaction.user.roles if staff_role else False
 
         if not is_staff and not interaction.user.guild_permissions.administrator:
             await interaction.followup.send("❌ Solo lo staff o un admin può eliminare i ticket!", ephemeral=True)
             return
 
-        # Generate transcript BEFORE deleting (invoked_by="delete")
         try:
             await self.generate_transcript(interaction, invoked_by="delete")
-        except Exception:
+        except:
             try:
                 await interaction.followup.send("⚠️ Errore durante la generazione del transcript; procedo comunque con l'eliminazione.", ephemeral=True)
-            except Exception:
+            except:
                 pass
 
-        # remove stored ticket
         try:
             del self.tickets[channel_id]
             self.save_tickets()
-        except Exception:
+        except:
             pass
 
-        # delete the channel
         try:
             await channel.delete(reason=f"Ticket eliminato da {interaction.user}")
         except Exception as e:
             try:
                 await interaction.followup.send(f"❌ Errore eliminazione canale: {e}", ephemeral=True)
-            except Exception:
+            except:
                 pass
             return
 
         try:
             await interaction.followup.send("🗑️ Ticket eliminato.", ephemeral=True)
-        except Exception:
+        except:
             pass
 
-    # ---------- Classic (text) commands for ticket management ----------
     @commands.command(name="add_member")
     @commands.has_permissions(manage_channels=True)
     async def add_member(self, ctx: commands.Context, member: discord.Member):
@@ -745,48 +790,22 @@ class Tickets(commands.Cog):
             await ctx.send("❌ Non hai ticket aperti!")
             return
 
-        embed = discord.Embed(title="I Tuoi Ticket Aperti", description=f"Totale: {len(user_tickets)}", color=0x3498DB)
+        embed = discord.Embed(title="I Tuoi Ticket Aperti", description=f"Totale: {len(user_tickets)}", color=0xE6C44C)
         for ticket_id, ticket in user_tickets:
             channel = ctx.guild.get_channel(int(ticket_id))
             created_date = datetime.fromisoformat(ticket.get('created_at')).strftime("%d/%m/%Y %H:%M")
-            embed.add_field(name=f"{ticket.get('topic', 'Ticket')}", value=f"ID: {ticket_id}\nCreato: {created_date}\nCanale: {channel.mention if channel else 'Non trovato'}", inline=False)
+            embed.add_field(name=f"{ticket.get('panel', 'Ticket')}", value=f"ID: {ticket_id}\nCreato: {created_date}\nCanale: {channel.mention if channel else 'Non trovato'}", inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(name="ticket_help")
     async def ticket_help(self, ctx: commands.Context):
-        embed = discord.Embed(title="Sistema Tickets", description="Usa i comandi seguenti:", color=0x3498DB)
+        embed = discord.Embed(title="Sistema Tickets", description="Usa i comandi seguenti:", color=0xE6C44C)
         embed.add_field(name="/ticket create <argomento>", value="Crea un nuovo ticket", inline=False)
-        embed.add_field(name="/ticket close", value="Chiude il ticket nel canale attuale", inline=False)
-        embed.add_field(name="/ticket add_member <utente>", value="Aggiungi un utente al ticket (testuale)", inline=False)
-        embed.add_field(name="/ticket remove_member <utente>", value="Rimuovi un utente dal ticket (testuale)", inline=False)
-        embed.add_field(name="/ticket list", value="Mostra tutti i tuoi ticket aperti", inline=False)
         embed.add_field(name="/ticket panel", value="Mostra il pannello per creare ticket", inline=False)
+        embed.add_field(name="/ticket close", value="Chiude il ticket nel canale attuale", inline=False)
         embed.add_field(name="/ticket reopen", value="Riapri un ticket chiuso (solo staff)", inline=False)
+        embed.add_field(name="/ticket delete", value="Elimina il ticket (solo staff)", inline=False)
         await ctx.send(embed=embed)
 
-    @commands.command(name="add_staff_role")
-    @commands.has_permissions(administrator=True)
-    async def add_staff_role(self, ctx: commands.Context):
-        channel_id = str(ctx.channel.id)
-        if channel_id not in self.tickets:
-            await ctx.send("❌ Questo non è un canale ticket!")
-            return
-
-        staff_role_id = self.config.get("staff_role_id")
-        if not staff_role_id:
-            await ctx.send("❌ Ruolo staff non configurato in config.json!")
-            return
-
-        staff_role = ctx.guild.get_role(staff_role_id)
-        if not staff_role:
-            await ctx.send("❌ Ruolo staff non trovato nel server!")
-            return
-
-        await ctx.channel.set_permissions(staff_role, read_messages=True, send_messages=True)
-        await ctx.send(f"✅ {staff_role.mention} può ora visualizzare e scrivere in questo ticket")
-
-
-# Setup function for extension
-async def setup(bot: commands.Bot):
-    await bot.add_cog(Tickets(bot))
-    
+    async def setup(bot: commands.Bot):
+        await bot.add_cog(Tickets(bot))
