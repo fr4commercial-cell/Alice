@@ -4,6 +4,7 @@ import json
 import os
 import datetime
 import re
+import asyncio
 from math import ceil
 from discord import app_commands
 from bot_utils import OWNER_ID, owner_or_has_permissions, is_owner
@@ -160,6 +161,7 @@ class ModerationCog(commands.Cog):
                 'warn': 0xFFA500,
                 'unwarn': 0x3498DB,
                 'clearwarns': 0x95A5A6,
+                'clear': 0x7289DA,
                 'unban': 0x2ECC71,
                 'nick': 0x9B59B6
             }
@@ -389,6 +391,58 @@ class ModerationCog(commands.Cog):
             await self._send_mod_log(interaction.guild, 'unmute', member, interaction.user, reason=reason)
         except Exception as e:
             await interaction.response.send_message(f'❌ Errore nell\'unmute: {e}', ephemeral=True)
+
+    @app_commands.command(name='clear', description='Cancella messaggi dal canale corrente')
+    @owner_or_has_permissions(manage_messages=True)
+    @app_commands.describe(amount='Numero di messaggi da eliminare (es. 20) oppure "all" per svuotare il canale')
+    async def slash_clear(self, interaction: discord.Interaction, amount: str):
+        channel = interaction.channel
+        if channel is None or not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message('❌ Questo comando può essere usato solo in un canale testuale.', ephemeral=True)
+            return
+
+        request = amount.strip().lower()
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        deleted_total = 0
+        reason = f'Clear richiesto da {interaction.user} ({interaction.user.id})'
+
+        try:
+            if request == 'all':
+                # Ripeti purge finché non ci sono più messaggi eliminabili (limite 14 giorni)
+                while True:
+                    deleted = await channel.purge(limit=100, reason=reason)
+                    if not deleted:
+                        break
+                    deleted_total += len(deleted)
+                    await asyncio.sleep(1)
+            else:
+                try:
+                    to_delete = int(request)
+                except ValueError:
+                    await interaction.followup.send('❌ Specifica un numero valido oppure "all".', ephemeral=True)
+                    return
+
+                if to_delete <= 0:
+                    await interaction.followup.send('❌ Il numero deve essere maggiore di zero.', ephemeral=True)
+                    return
+
+                remaining = to_delete
+                while remaining > 0:
+                    chunk = min(100, remaining)
+                    deleted = await channel.purge(limit=chunk, reason=reason)
+                    if not deleted:
+                        break
+                    deleted_total += len(deleted)
+                    remaining -= len(deleted)
+                    await asyncio.sleep(1)
+
+            await interaction.followup.send(f'🧹 Eliminati {deleted_total} messaggi in {channel.mention}.', ephemeral=True)
+            await self._send_mod_log(interaction.guild, 'clear', None, interaction.user, channel=channel.mention, quantita=deleted_total, criterio=request)
+        except discord.Forbidden:
+            await interaction.followup.send('❌ Non ho i permessi per eliminare messaggi qui.', ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f'❌ Errore durante la cancellazione: {e}', ephemeral=True)
 
     warn = app_commands.Group(name='warn', description='Sistema di warn')
 
