@@ -257,6 +257,7 @@ class Counting(commands.Cog):
 
         chan_conf["last"] = num
         chan_conf["last_user"] = message.author.id
+        chan_conf.pop("last_error_message_id", None)
         self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
         self.inc_leaderboard(guild_id, str(message.author.id))
 
@@ -303,24 +304,46 @@ class Counting(commands.Cog):
         except Exception:
             pass
 
-        # Reset counter state
+        expected = chan_conf.get("last", 0) + 1
+
+        # Remove previous bot error message if it exists to avoid duplicates
+        previous_error_id = chan_conf.get("last_error_message_id")
+        if previous_error_id:
+            try:
+                prev_msg = await message.channel.fetch_message(previous_error_id)
+                await prev_msg.delete()
+            except Exception:
+                pass
+
+        # Reset counter state (will be persisted after sending feedback)
         chan_conf["last"] = 0
         chan_conf["last_user"] = None
-        self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
+        chan_conf.pop("last_error_message_id", None)
 
         # Build feedback message
         emoji = self._get_emoji(message.guild, "error_emoji") or "❌"
-        reasons = {
+        base_messages = {
             "same_user": f"{emoji} Non puoi contare due volte di fila!",
             "invalid": f"{emoji} Il messaggio deve essere un numero valido!",
-            "wrong_number": f"{emoji} Numero sbagliato! La sequenza è stata resettata.",
+            "wrong_number": f"{emoji} Numero sbagliato!",
         }
-        msg = reasons.get(reason, f"{emoji} Errore nel counting.")
+        msg = base_messages.get(reason, f"{emoji} Errore nel counting.")
+        if expected > 0:
+            msg += f" Dovevi inviare **{expected}**."
+        if reason == "wrong_number":
+            msg += " La sequenza è stata resettata."
 
+        sent_message = None
         try:
-            await message.channel.send(msg, delete_after=4)
+            sent_message = await message.channel.send(msg)
         except Exception:
             pass
+
+        if sent_message:
+            chan_conf["last_error_message_id"] = sent_message.id
+
+        # Persist updated configuration
+        self.set_channel_conf(guild_id, str(message.channel.id), chan_conf)
 
         # Apply timeout to offender (requires Moderate Members permission)
         try:
