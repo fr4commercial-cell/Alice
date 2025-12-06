@@ -1,0 +1,51 @@
+{
+  "staff_role_id": 123456789012345678,
+  "category_name": "Tickets",
+  "panels": [
+    {
+      "name": "Bug & Supporto",
+      "description": "Segnala bug o richiedi supporto",
+      "emoji": "<a:Attenzione:1441165315726905456>",
+      "color": 16711680,
+      "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+      "fields": [
+        {"name": "Descrivi il problema", "placeholder": "Cosa non funziona?", "required": true}
+      ]
+    },
+    {
+      "name": "Richiesta Mod DS",
+      "description": "Richiedi un Mod Discord",
+      "emoji": "<:ModDiscord:1406397342914973888>",
+      "color": 16776960,
+      "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+      "fields": [
+        {"name": "Motivazione richiesta", "placeholder": "Perché vuoi richiedere un Mod?", "required": true}
+      ]
+    },
+    {
+      "name": "Richiesta CW",
+      "description": "Richiesta Clan War",
+      "emoji": "<:Spade:1406304639326097408>",
+      "color": 65280,
+      "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+      "fields": [
+        {"name": "Nick in game", "placeholder": "Il tuo nickname...", "required": true},
+        {"name": "Dettagli ClanWar", "placeholder": "Dettagli sulla ClanWar richiesta...", "required": true}
+      ]
+    },
+    {
+      "name": "Richiesta Alicers",
+      "description": "Richiesta di ruolo Alicers",
+      "emoji": "<a:Corona:1406397702610227240>",
+      "color": 16711935,
+      "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
+      "fields": [
+        {"name": "Motivazione richiesta", "placeholder": "Perché vuoi questo ruolo?", "required": true}
+      ]
+    }
+  ],
+  "1207358785111330836": {
+    "boost_channel": 1381614470043795606
+  },
+  "verification": {}
+}
