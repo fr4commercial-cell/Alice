@@ -1,10 +1,51 @@
+"""
+Clean, ready-to-paste Discord ticket cog (Python)
+
+Istruzioni rapide:
+- Metti questo file in una cog folder (es. `cogs/tickets.py`).
+- Assicurati di avere una struttura come:
+    bot.py
+    cogs/
+      tickets.py  <-- questo file
+    config_tickets.json  <-- generato/aggiornabile
+    tickets.json  <-- generato automaticamente
+    transcripts/  <-- verrà creato automaticamente
+
+Requisiti:
+- Python 3.10+ (consigliato 3.11)
+- discord.py 2.2+ (o 2.4+ se disponibile)
+- intents corretti in bot (message content opzionale solo se usi comandi testuali)
+
+Come usare:
+1. Copia questo file in `cogs/tickets.py`.
+2. Avvia il bot; se `config_tickets.json` non esiste verrà creato con valori di default.
+3. Controlla `config_tickets.json` per modificare `staff_role_id`, `category_id` (opzionale), `log_channel_id`, o personalizzare i pannelli.
+4. Usa lo slash `/ticket panel` per mostrare il pannello di creazione dei ticket o `/ticket create <topic>` per crearne uno diretto.
+
+Note sui permessi e sui ruoli:
+- `staff_role_id` deve essere l'ID numerico del ruolo staff (facoltativo). Se non impostato, solo gli amministratori avranno permessi staff.
+- `category_id` se impostato deve essere l'ID della Category dove verranno creati i ticket; altrimenti verrà usato il nome in ogni pannello o verrà creata.
+
+Configurazione rapida (file `config_tickets.json`):
+- staff_role_id: 123456789012345678
+- category_id: null
+- log_channel_id: null
+- panels: lista di pannelli (mai più di 20 per ragioni UI)
+
+Se vuoi cambiare colori/emoji/banner per l'embed del pannello modifica i campi `color` e `image` sotto ogni panel.
+
+--------------------------------------------------------------------------------
+
+# Cog pronto
+"""
+
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
 import json
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 BASE_DIR = os.path.dirname(__file__)
 TICKETS_FILE = os.path.join(BASE_DIR, '..', 'tickets.json')
@@ -12,9 +53,10 @@ CONFIG_FILE = os.path.join(BASE_DIR, '..', 'config_tickets.json')
 TRANSCRIPTS_DIR = os.path.join(os.path.dirname(BASE_DIR), "transcripts")
 
 # ------------------ CONFIG AUTOMATICA PREMIUM ------------------
-DEFAULT_AUTO_CONFIG = {
-    "staff_role_id": 123456789012345678,
-    "category_id": None,
+DEFAULT_AUTO_CONFIG: Dict[str, Any] = {
+    "staff_role_id": None,  # metti qui l'ID del ruolo staff se vuoi
+    "category_id": None,    # opzionale: forza gli ID della category
+    "log_channel_id": None, # opzionale: canale dove inviare i transcript
     "panels": [
 
         {
@@ -25,21 +67,9 @@ DEFAULT_AUTO_CONFIG = {
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Bug & Supporto",
             "fields": [
-                {
-                    "name": "Tipo di richiesta",
-                    "placeholder": "Bug / Assistenza / Altro",
-                    "required": True
-                },
-                {
-                    "name": "Descrizione del problema",
-                    "placeholder": "Spiega dettagliatamente cosa sta succedendo.",
-                    "required": True
-                },
-                {
-                    "name": "Come riprodurlo (se bug)",
-                    "placeholder": "1. ... 2. ... 3. ... (opzionale)",
-                    "required": False
-                }
+                {"name": "Tipo di richiesta", "placeholder": "Bug / Assistenza / Altro", "required": True},
+                {"name": "Descrizione del problema", "placeholder": "Spiega dettagliatamente cosa sta succedendo.", "required": True},
+                {"name": "Come riprodurlo (se bug)", "placeholder": "1. ... 2. ... 3. ... (opzionale)", "required": False}
             ]
         },
 
@@ -51,16 +81,8 @@ DEFAULT_AUTO_CONFIG = {
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – CW",
             "fields": [
-                {
-                    "name": "Motivo della richiesta",
-                    "placeholder": "Perché richiedi il CW?",
-                    "required": True
-                },
-                {
-                    "name": "ID Utente / Riferimento",
-                    "placeholder": "Inserisci eventuali ID o riferimenti (opzionale)",
-                    "required": False
-                }
+                {"name": "Motivo della richiesta", "placeholder": "Perché richiedi il CW?", "required": True},
+                {"name": "ID Utente / Riferimento", "placeholder": "Inserisci eventuali ID o riferimenti (opzionale)", "required": False}
             ]
         },
 
@@ -72,16 +94,8 @@ DEFAULT_AUTO_CONFIG = {
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Mod DS",
             "fields": [
-                {
-                    "name": "Tipo di richiesta",
-                    "placeholder": "Modifica / Assistenza / Altro",
-                    "required": True
-                },
-                {
-                    "name": "Dettagli",
-                    "placeholder": "Spiega in modo chiaro cosa ti serve.",
-                    "required": True
-                }
+                {"name": "Tipo di richiesta", "placeholder": "Modifica / Assistenza / Altro", "required": True},
+                {"name": "Dettagli", "placeholder": "Spiega in modo chiaro cosa ti serve.", "required": True}
             ]
         },
 
@@ -93,40 +107,39 @@ DEFAULT_AUTO_CONFIG = {
             "image": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
             "category": "Tickets – Alicers",
             "fields": [
-                {
-                    "name": "Descrizione richiesta",
-                    "placeholder": "Quale intervento desideri dagli Alicers?",
-                    "required": True
-                },
-                {
-                    "name": "Priorità",
-                    "placeholder": "Bassa / Media / Alta",
-                    "required": False
-                }
+                {"name": "Descrizione richiesta", "placeholder": "Quale intervento desideri dagli Alicers?", "required": True},
+                {"name": "Priorità", "placeholder": "Bassa / Media / Alta", "required": False}
             ]
         }
     ]
 }
 
-def load_or_create_config():
+# ------------------ Utilities ------------------
+
+def load_or_create_config() -> Dict[str, Any]:
+    """Load config from CONFIG_FILE or create defaults.
+    Merges user config with defaults safely.
+    """
     if not os.path.exists(CONFIG_FILE):
         save_json(CONFIG_FILE, DEFAULT_AUTO_CONFIG)
-        return DEFAULT_AUTO_CONFIG
+        return DEFAULT_AUTO_CONFIG.copy()
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
             raise ValueError('config malformed')
         merged = {**DEFAULT_AUTO_CONFIG, **data}
+        # ensure panels is valid list
         if 'panels' not in merged or not isinstance(merged['panels'], list):
             merged['panels'] = DEFAULT_AUTO_CONFIG['panels']
         save_json(CONFIG_FILE, merged)
         return merged
     except Exception:
         save_json(CONFIG_FILE, DEFAULT_AUTO_CONFIG)
-        return DEFAULT_AUTO_CONFIG
+        return DEFAULT_AUTO_CONFIG.copy()
 
-def load_json(path, default):
+
+def load_json(path: str, default: Any):
     try:
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
@@ -135,25 +148,29 @@ def load_json(path, default):
         pass
     return default
 
-def save_json(path, data):
+
+def save_json(path: str, data: Any) -> None:
     try:
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
 
-def ensure_transcripts_dir():
+
+def ensure_transcripts_dir() -> None:
     try:
         os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
     except Exception:
         pass
 
+
 # ------------------ Modal & Views ------------------
 class TicketFormModal(ui.Modal):
-    def __init__(self, panel, cog):
+    def __init__(self, panel: dict, cog: 'Tickets'):
         super().__init__(title=panel.get('name', 'Modulo Ticket'))
         self.panel = panel
         self.cog = cog
+        # Discord modal max 5 inputs
         for field in panel.get('fields', [])[:5]:
             style = discord.TextStyle.paragraph if len(field.get('name', '')) > 20 else discord.TextStyle.short
             self.add_item(ui.TextInput(
@@ -164,6 +181,7 @@ class TicketFormModal(ui.Modal):
             ))
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Create an embed summarizing the filled form and send it in the ticket channel
         embed = discord.Embed(
             title=f"📋 Informazioni Ticket — {self.panel.get('name')}",
             color=self.panel.get('color', 0xE6C44C),
@@ -176,19 +194,22 @@ class TicketFormModal(ui.Modal):
         if self.panel.get('image'):
             embed.set_image(url=self.panel['image'])
 
+        # notify user ephemerally
         try:
             await interaction.response.send_message("✅ Informazioni registrate!", ephemeral=True)
-        except:
+        except Exception:
             try:
                 await interaction.followup.send("✅ Informazioni registrate!", ephemeral=True)
-            except:
+            except Exception:
                 pass
 
+        # send embed into the channel where modal was opened (should be the ticket channel)
         try:
             if interaction.channel:
                 await interaction.channel.send(embed=embed)
-        except:
+        except Exception:
             pass
+
 
 class TicketFormView(ui.View):
     def __init__(self, modal: TicketFormModal):
@@ -198,6 +219,7 @@ class TicketFormView(ui.View):
     @ui.button(label="Compila Informazioni", style=discord.ButtonStyle.success, custom_id="open_modal_button")
     async def open_modal(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(self.modal)
+
 
 class TicketControlsView(ui.View):
     def __init__(self, cog: 'Tickets'):
@@ -238,8 +260,9 @@ class TicketControlsView(ui.View):
             return
         await self.cog.reopen_ticket(interaction)
 
+
 class TicketPanelButton(ui.Button):
-    def __init__(self, panel, cog):
+    def __init__(self, panel: dict, cog: 'Tickets'):
         label = panel.get('name', 'Ticket')
         emoji = panel.get('emoji', None)
         super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary,
@@ -267,7 +290,10 @@ class TicketPanelButton(ui.Button):
 
         staff_role_id = self.cog.config.get("staff_role_id")
         if staff_role_id:
-            staff_role = guild.get_role(staff_role_id)
+            try:
+                staff_role = guild.get_role(int(staff_role_id))
+            except Exception:
+                staff_role = None
             if staff_role:
                 overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
@@ -307,13 +333,14 @@ class TicketPanelButton(ui.Button):
                 modal = TicketFormModal(self.panel, self.cog)
                 view = TicketFormView(modal)
                 await ticket_channel.send("Premi il pulsante per compilare le informazioni del ticket:", view=view)
-        except:
+        except Exception:
             pass
 
         await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
 
+
 class TicketPanelsView(ui.View):
-    def __init__(self, panels, cog):
+    def __init__(self, panels: list, cog: 'Tickets'):
         super().__init__(timeout=None)
         for panel in panels:
             self.add_item(TicketPanelButton(panel, cog))
@@ -328,6 +355,7 @@ class Tickets(commands.Cog):
         self.config = load_or_create_config()
         ensure_transcripts_dir()
 
+        # register slash group
         self.ticket_group = app_commands.Group(name="ticket", description="Gestione tickets")
         self.ticket_group.command(name="panel", description="Mostra il pannello per creare ticket")(self.ticket_panel)
         self.ticket_group.command(name="create", description="Crea un nuovo ticket")(self.create_ticket)
@@ -339,7 +367,7 @@ class Tickets(commands.Cog):
         except Exception:
             pass
 
-    def save_tickets(self):
+    def save_tickets(self) -> None:
         save_json(TICKETS_FILE, self.tickets)
 
     def _is_staff(self, member: discord.Member) -> bool:
@@ -380,17 +408,17 @@ class Tickets(commands.Cog):
                 return None
         return category
 
-    async def generate_transcript(self, interaction: discord.Interaction, invoked_by: str = "unknown"):
+    async def generate_transcript(self, interaction: discord.Interaction, invoked_by: str = "unknown") -> None:
         try:
             await interaction.response.defer(ephemeral=True)
-        except:
+        except Exception:
             pass
 
         channel = interaction.channel
         if channel is None:
             try:
                 await interaction.followup.send("❌ Impossibile leggere il canale.", ephemeral=True)
-            except:
+            except Exception:
                 pass
             return
 
@@ -398,7 +426,7 @@ class Tickets(commands.Cog):
         if channel_id not in self.tickets:
             try:
                 await interaction.followup.send("❌ Questo non è un canale ticket!", ephemeral=True)
-            except:
+            except Exception:
                 pass
             return
 
@@ -426,7 +454,7 @@ class Tickets(commands.Cog):
                     for att in msg.attachments:
                         try:
                             txt_lines.append(f"    [ALLEGATO] {att.filename} -> {att.url}")
-                        except:
+                        except Exception:
                             pass
         except Exception as e:
             txt_lines.append(f"[ERRORE LETTURA MESSAGGI: {e}]")
@@ -443,7 +471,7 @@ class Tickets(commands.Cog):
         try:
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(transcript_text)
-        except:
+        except Exception:
             txt_path = None
 
         log_channel = None
@@ -451,7 +479,7 @@ class Tickets(commands.Cog):
         if log_ch_id:
             try:
                 log_channel = channel.guild.get_channel(log_ch_id)
-            except:
+            except Exception:
                 log_channel = self.bot.get_channel(log_ch_id)
 
         log_msg = f"📄 Transcript del ticket `{channel.name}` (invocato da {interaction.user.mention}, modo: {invoked_by})"
@@ -465,15 +493,15 @@ class Tickets(commands.Cog):
                     await log_channel.send(content=log_msg, files=files)
                 else:
                     await log_channel.send(content=log_msg + "\n```" + (transcript_text[:1900] or "Nessun contenuto") + "```")
-            except:
+            except Exception:
                 try:
                     await interaction.followup.send("⚠️ Non sono riuscito a inviare il transcript nel canale log (permessi?).", ephemeral=True)
-                except:
+                except Exception:
                     pass
         else:
             try:
                 await interaction.followup.send("⚠️ Canale di log non trovato; transcript salvato localmente.", ephemeral=True)
-            except:
+            except Exception:
                 pass
 
         try:
@@ -483,17 +511,17 @@ class Tickets(commands.Cog):
                     await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):", file=discord.File(txt_path, filename=txt_filename))
                 else:
                     await author_member.send(content=f"📄 Transcript del tuo ticket `{channel.name}` (richiesto da {interaction.user}):\n```{transcript_text[:1900]}```")
-        except:
+        except Exception:
             pass
 
         try:
             await interaction.followup.send("📄 Transcript generato e salvato in /transcripts/ (inviato a log + DM se possibile).", ephemeral=True)
-        except:
+        except Exception:
             pass
 
     # ---------- Slash commands (app commands) ----------
 
-    async def ticket_panel(self, interaction: discord.Interaction):
+    async def ticket_panel(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         panels = self.config.get("panels", [])
         if not panels:
@@ -514,13 +542,13 @@ class Tickets(commands.Cog):
         view = TicketPanelsView(panels, self)
         try:
             await interaction.followup.send(embed=embed, view=view)
-        except:
+        except Exception:
             try:
                 await interaction.channel.send(embed=embed, view=view)
-            except:
+            except Exception:
                 await interaction.followup.send("❌ Impossibile inviare il pannello.", ephemeral=True)
 
-    async def create_ticket(self, interaction: discord.Interaction, topic: str):
+    async def create_ticket(self, interaction: discord.Interaction, topic: str) -> None:
         await interaction.response.defer()
         guild = interaction.guild
         if guild is None:
@@ -540,7 +568,10 @@ class Tickets(commands.Cog):
 
         staff_role_id = self.config.get("staff_role_id")
         if staff_role_id:
-            staff_role = guild.get_role(staff_role_id)
+            try:
+                staff_role = guild.get_role(int(staff_role_id))
+            except Exception:
+                staff_role = None
             if staff_role:
                 overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
@@ -574,13 +605,13 @@ class Tickets(commands.Cog):
             controls_view = TicketControlsView(self)
             await ticket_channel.send(embed=embed, view=controls_view)
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
-        except:
+        except Exception:
             await interaction.followup.send(f"✅ Ticket creato: {ticket_channel.mention}", ephemeral=True)
 
-    async def close_ticket(self, interaction: discord.Interaction):
+    async def close_ticket(self, interaction: discord.Interaction) -> None:
         try:
             await interaction.response.defer()
-        except:
+        except Exception:
             pass
 
         channel_id = str(interaction.channel.id)
@@ -604,7 +635,7 @@ class Tickets(commands.Cog):
         if author_member:
             try:
                 await interaction.channel.set_permissions(author_member, read_messages=True, send_messages=False)
-            except:
+            except Exception:
                 pass
 
         embed = discord.Embed(
@@ -615,18 +646,18 @@ class Tickets(commands.Cog):
 
         try:
             await interaction.followup.send("✅ Ticket chiuso.", ephemeral=True)
-        except:
+        except Exception:
             try:
                 await interaction.channel.send("✅ Ticket chiuso.")
-            except:
+            except Exception:
                 pass
 
         try:
             await interaction.channel.send(embed=embed)
-        except:
+        except Exception:
             pass
 
-    async def reopen_ticket(self, interaction: discord.Interaction):
+    async def reopen_ticket(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         channel_id = str(interaction.channel.id)
         if channel_id not in self.tickets:
@@ -653,7 +684,7 @@ class Tickets(commands.Cog):
         if author:
             try:
                 await interaction.channel.set_permissions(author, read_messages=True, send_messages=True)
-            except:
+            except Exception:
                 pass
 
         embed = discord.Embed(
@@ -663,21 +694,21 @@ class Tickets(commands.Cog):
         )
         try:
             await interaction.followup.send(embed=embed, ephemeral=True)
-        except:
+        except Exception:
             try:
                 await interaction.channel.send("✅ Ticket riaperto.")
-            except:
+            except Exception:
                 pass
 
         try:
             await interaction.channel.send(embed=embed)
-        except:
+        except Exception:
             pass
 
-    async def delete_ticket(self, interaction: discord.Interaction):
+    async def delete_ticket(self, interaction: discord.Interaction) -> None:
         try:
             await interaction.response.defer(ephemeral=True)
-        except:
+        except Exception:
             pass
 
         channel = interaction.channel
@@ -701,16 +732,16 @@ class Tickets(commands.Cog):
 
         try:
             await self.generate_transcript(interaction, invoked_by="delete")
-        except:
+        except Exception:
             try:
                 await interaction.followup.send("⚠️ Errore durante la generazione del transcript; procedo comunque con l'eliminazione.", ephemeral=True)
-            except:
+            except Exception:
                 pass
 
         try:
             del self.tickets[channel_id]
             self.save_tickets()
-        except:
+        except Exception:
             pass
 
         try:
@@ -718,13 +749,13 @@ class Tickets(commands.Cog):
         except Exception as e:
             try:
                 await interaction.followup.send(f"❌ Errore eliminazione canale: {e}", ephemeral=True)
-            except:
+            except Exception:
                 pass
             return
 
         try:
             await interaction.followup.send("🗑️ Ticket eliminato.", ephemeral=True)
-        except:
+        except Exception:
             pass
 
     @commands.command(name="add_member")
@@ -794,6 +825,7 @@ class Tickets(commands.Cog):
         embed.add_field(name="/ticket reopen", value="Riapri un ticket chiuso (solo staff)", inline=False)
         embed.add_field(name="/ticket delete", value="Elimina il ticket (solo staff)", inline=False)
         await ctx.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Tickets(bot))
