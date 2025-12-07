@@ -2,6 +2,7 @@
   "staff_role_id": 123456789012345678,
   "category_id": 1381598420187480064,
   "category_name": "Supporto Alicers",
+
   "panels": [
     {
       "name": "Bug & Supporto",
@@ -10,9 +11,14 @@
       "color": 16711680,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Descrivi il tuo problema", "placeholder": "Scrivi in modo dettagliato ogni singolo problema (se necessario fornisci screenshot).", "required": true}
+        {
+          "name": "Descrivi il tuo problema",
+          "placeholder": "Scrivi in modo dettagliato ogni singolo problema (se necessario fornisci screenshot).",
+          "required": true
+        }
       ]
     },
+
     {
       "name": "Richiesta Mod DS",
       "description": "Richiedi un Mod Discord",
@@ -20,9 +26,14 @@
       "color": 16776960,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "Perché vuoi essere Mod Discord di Alicers?", "placeholder": "Fornisci età, motivazione per la quale vuoi essere Mod del Discord Alicers.", "required": true}
+        {
+          "name": "Perché vuoi essere Mod Discord di Alicers?",
+          "placeholder": "Fornisci età, motivazione per la quale vuoi essere Mod del Discord Alicers.",
+          "required": true
+        }
       ]
     },
+
     {
       "name": "Richiesta CW",
       "description": "Richiesta Clan War",
@@ -30,10 +41,19 @@
       "color": 65280,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "IGN (Nick in Game)", "placeholder": "Chi di voi gioca la CW?", "required": true},
-        {"name": "Nome del Clan che ha richiesto la CW?", "placeholder": "Le persone che nomini devono far parte del clan! (Win nostra a Tavolino in caso un player vostro non faccia parte del clan)", "required": true}
+        {
+          "name": "IGN (Nick in Game)",
+          "placeholder": "Chi di voi gioca la CW?",
+          "required": true
+        },
+        {
+          "name": "Nome del Clan che ha richiesto la CW?",
+          "placeholder": "Le persone che nomini devono far parte del clan! (Win nostra a Tavolino in caso un player vostro non faccia parte del clan)",
+          "required": true
+        }
       ]
     },
+
     {
       "name": "Richiesta Alicers",
       "description": "Richiesta di ruolo Alicers",
@@ -41,12 +61,18 @@
       "color": 16711935,
       "banner": "https://cdn.discordapp.com/attachments/773466149249613824/1446925387383832769/alice_banner.webp",
       "fields": [
-        {"name": "IGN (Nick in Game)", "placeholder": "Perché vuoi entrare nel clan? Quanta xp hai? (fornisci screenshot delle tue statische in game) e Quante ore giochi alle BW di CoralMC?", "required": true}
+        {
+          "name": "IGN (Nick in Game)",
+          "placeholder": "Perché vuoi entrare nel clan? Quanta xp hai? (fornisci screenshot delle tue statische in game) e Quante ore giochi alle BW di CoralMC?",
+          "required": true
+        }
       ]
     }
   ],
+
   "1207358785111330836": {
     "boost_channel": 1381614470043795606
   },
+
   "verification": {}
 }
