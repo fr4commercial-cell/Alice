@@ -5,6 +5,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import copy
 import json
 import os
 import asyncio
@@ -33,13 +34,10 @@ def save_json(path, data):
         print(f"[Counting] Error saving {path}: {e}")
 
 DEFAULT_CONFIG = {
-    "milestones": [67, 100, 500, 666, 999, 1000, 5000, 10000],
     "log_channel_id": None,
     "timeout_minutes": 1,
     "success_emoji": "<a:Corretto:1441169877552599253>",
     "error_emoji": "<a:Sbagliato:1441165123568930896>",
-    "milestone_emoji": "<a:Fuoco:1381953999829336206>",
-    "milestone_emojis": {},  # mapping numero milestone -> emoji id personalizzata
     "special_numbers": {
         "67": "<a:67:1441169460345176197>",
         "100": "<a:100:1441169427533009118>",
@@ -58,7 +56,24 @@ class Counting(commands.Cog):
         self.bot = bot
         self.data: Dict[str, Any] = load_json(COUNTING_FILE, {})
         self.leaderboard = load_json(LEADERBOARD_FILE, {})
-        self.config = load_json(CONFIG_FILE, DEFAULT_CONFIG.copy())
+        self.config = load_json(CONFIG_FILE, copy.deepcopy(DEFAULT_CONFIG))
+        removed = False
+        for legacy_key in ("milestones", "milestone_emoji", "milestone_emojis"):
+            if legacy_key in self.config:
+                self.config.pop(legacy_key, None)
+                removed = True
+        if removed:
+            save_json(CONFIG_FILE, self.config)
+
+        cleaned_data = False
+        for guild_conf in self.data.values():
+            channels = guild_conf.get("channels", {})
+            for channel_conf in channels.values():
+                if "milestones" in channel_conf:
+                    channel_conf.pop("milestones", None)
+                    cleaned_data = True
+        if cleaned_data:
+            save_json(COUNTING_FILE, self.data)
 
     def _ensure_guild(self, guild_id: str):
         if guild_id not in self.data:
@@ -73,6 +88,7 @@ class Counting(commands.Cog):
 
     def set_channel_conf(self, guild_id: str, channel_id: str, conf: dict):
         self._ensure_guild(guild_id)
+        conf.pop("milestones", None)
         self.data[guild_id]["channels"][channel_id] = conf
         save_json(COUNTING_FILE, self.data)
 
@@ -105,14 +121,14 @@ class Counting(commands.Cog):
 
     # --- CONFIG EMOJI COMMAND ---
     @counting_group.command(name="emoji")
-    @app_commands.describe(type="success/error/milestone o numero", emoji="Emoji personalizzata del server")
+    @app_commands.describe(type="success/error o numero", emoji="Emoji personalizzata del server")
     async def counting_emoji(self, interaction, type: str, emoji: str):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ Permessi insufficienti.", ephemeral=True)
 
         type = type.lower()
-        if (type not in ["success", "error", "milestone"] and not type.isdigit()):
-            return await interaction.response.send_message("Usa: success, error, milestone, oppure un numero.", ephemeral=True)
+        if (type not in ["success", "error"] and not type.isdigit()):
+            return await interaction.response.send_message("Usa: success, error oppure un numero.", ephemeral=True)
 
         if not emoji.startswith("<"):
             return await interaction.response.send_message("Devi usare un'emoji personalizzata.", ephemeral=True)
@@ -123,13 +139,9 @@ class Counting(commands.Cog):
             return await interaction.response.send_message("Emoji non valida.", ephemeral=True)
 
         if type.isdigit():
-            # Se è un numero milestone presente nella lista milestones, salvarlo in milestone_emojis
-            if int(type) in self.config.get("milestones", []):
-                self.config.setdefault("milestone_emojis", {})[type] = emoji_id
-                save_json(CONFIG_FILE, self.config)
-                return await interaction.response.send_message(f"Emoji personalizzata per la milestone {type} impostata!", ephemeral=True)
-            # Altrimenti trattalo come numero speciale
-            self.config["special_numbers"][type] = emoji_id
+            # Configura un'emoji personalizzata per il numero speciale indicato
+            special = self.config.setdefault("special_numbers", {})
+            special[type] = emoji_id
             save_json(CONFIG_FILE, self.config)
             return await interaction.response.send_message(f"Emoji per il numero speciale {type} impostata!", ephemeral=True)
 
@@ -152,8 +164,7 @@ class Counting(commands.Cog):
             "last": start,
             "last_user": None,
             "recovery": allow_recovery,
-            "allow_chat": allow_chat,
-            "milestones": self.config.get("milestones", DEFAULT_CONFIG["milestones"])
+            "allow_chat": allow_chat
         }
 
         self.set_channel_conf(guild_id, chan_id, conf)
@@ -266,28 +277,6 @@ class Counting(commands.Cog):
             await message.add_reaction(emoji)
         except:
             pass
-
-        if num in chan_conf.get("milestones", []):
-            # Usa emoji specifica se configurata per quel numero
-            milestone_emojis = self.config.get("milestone_emojis", {})
-            specific_raw = milestone_emojis.get(str(num))
-            m_emoji = None
-            if specific_raw:
-                # Temporaneamente inserisci in config per riutilizzare _get_emoji
-                self.config["_temp_milestone_lookup"] = specific_raw
-                m_emoji = self._get_emoji(message.guild, "_temp_milestone_lookup")
-                self.config.pop("_temp_milestone_lookup", None)
-            if not m_emoji:
-                m_emoji = self._get_emoji(message.guild, "milestone_emoji") or "🎉"
-            # Aggiungi anche la reaction milestone al messaggio originale
-            try:
-                await message.add_reaction(m_emoji)
-            except Exception:
-                pass
-            try:
-                await message.channel.send(f"{m_emoji} Milestone **{num}** raggiunta da {message.author.mention}!")
-            except Exception:
-                pass
 
         special = self.config.get("special_numbers", {})
         if str(num) in special and special[str(num)]:
